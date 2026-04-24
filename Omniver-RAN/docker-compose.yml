@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: omniver_ran_postgres
+    environment:
+      POSTGRES_DB: ran_dt
+      POSTGRES_USER: ran
+      POSTGRES_PASSWORD: ran
+    ports:
+      - "5432:5432"
+    volumes:
+      - ../data/pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ran -d ran_dt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped

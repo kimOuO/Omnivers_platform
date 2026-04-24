@@ -1,0 +1,19 @@
+[package]
+title = "RAN API Server"
+version = "0.3.0"
+description = "HTTP REST API (commands) + WebSocket push (UE snapshots) for the RAN Digital Twin."
+category = "Service"
+keywords = ["ran", "api", "http", "websocket"]
+
+[dependencies]
+"mitlab.ran.scene.builder" = {}
+"omni.kit.pip_archive" = {}   # provides bundled `websockets`
+
+[settings]
+
+[[python.module]]
+name = "mitlab.ran.api"
+
+[[test]]
+dependencies = []
+args = []

@@ -1,0 +1,17 @@
+from django.db import models
+
+
+class SignalHistory(models.Model):
+    id = models.AutoField(primary_key=True)
+    signal_uuid = models.CharField(max_length=255, unique=True, db_index=True)
+    ue_name = models.CharField(max_length=128, db_index=True)
+    serving_cell = models.CharField(max_length=128)
+    rsrp_dbm = models.FloatField()
+    sinr_db = models.FloatField()
+    rsrp_map_json = models.JSONField(default=dict)
+    signal_ts = models.DateTimeField(db_index=True)
+
+    class Meta:
+        app_label = "ran"
+        db_table = "signal_history"
+        indexes = [models.Index(fields=["ue_name", "signal_ts"], name="ix_sigh_ue_ts")]

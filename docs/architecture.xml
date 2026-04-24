@@ -1,0 +1,158 @@
+<mxGraphModel dx="5783" dy="2776" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="ARLvhRFmjBG3QmpI7e2_-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;" value="host" vertex="1">
+      <mxGeometry height="3100" width="2500" x="-210" y="760" as="geometry" />
+    </mxCell>
+    <mxCell id="ARLvhRFmjBG3QmpI7e2_-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1976d2;verticalAlign=top;fontStyle=1;fontSize=20;fontColor=#0d47a1;dashed=1;dashPattern=8 4;align=left;spacingLeft=10;spacingTop=6;" value="Docker Network — omniver_default (compose)" vertex="1">
+      <mxGeometry height="1430" width="2260" x="-80" y="1250" as="geometry" />
+    </mxCell>
+    <mxCell id="ARLvhRFmjBG3QmpI7e2_-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;" value="&lt;font style=&quot;font-size: 16px;&quot;&gt;&lt;b&gt;Kit Render Server&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;IP / Port&lt;/b&gt;:&lt;br&gt; localhost:8080 / :8081 (host)&lt;br&gt; host.docker.internal:8080 / :8081 (from container)&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp; VNC display (:0 或 :1)&lt;br&gt;&lt;br&gt;&lt;b&gt;負責做什麼（白話）&lt;/b&gt;：&lt;br&gt;畫 3D 場景、讓 UE 跟著軌跡跑、所有 USD 讀寫都在這做。&lt;br&gt;對外兩個 port：&lt;br&gt;&amp;nbsp;&amp;nbsp;• HTTP :8080 → 收指令（build / move / signal）&lt;br&gt;&amp;nbsp;&amp;nbsp;• WS :8081 → 主動推 UE snapshot（2 Hz）&lt;br&gt;&lt;br&gt;&lt;b&gt;技術&lt;/b&gt;：&lt;br&gt;NVIDIA Omniverse Kit SDK 110.0.0 (pip)&lt;br&gt;+ USD + Vulkan / RTX&lt;br&gt;+ extension 自己起的 HTTP + WS server&lt;/font&gt;" vertex="1">
+      <mxGeometry height="340" width="460" x="-80" y="860" as="geometry" />
+    </mxCell>
+    <mxCell id="ARLvhRFmjBG3QmpI7e2_-4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;Django Backend - omniver_backend&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;IP / Port&lt;/b&gt;:&lt;br&gt; localhost:8001 (host) → container :8000&lt;br&gt;&lt;br&gt;&lt;b&gt;負責做什麼（白話）&lt;/b&gt;：&lt;br&gt;前後端的中間人、不做訊號計算。&lt;br&gt;&amp;nbsp;&amp;nbsp;• 收前端指令 → 轉成 HTTP 打給 Kit&lt;br&gt;&amp;nbsp;&amp;nbsp;• 當 WS client 接 Kit :8081 收 snapshot&lt;br&gt;&amp;nbsp;&amp;nbsp;• 把 snapshot 透過自己的 WS 推給瀏覽器&lt;br&gt;&amp;nbsp;&amp;nbsp;• UE 位置 / 訊號寫進 Postgres（history）&lt;br&gt;&lt;br&gt;&lt;b&gt;技術&lt;/b&gt;：&lt;br&gt;Django 5.1 + Channels + Daphne (ASGI)&lt;br&gt;POST-only API：/api/v0.1/RAN/{Module}/{Actor}/{Element}&lt;br&gt;WS 端點：/api/v0.1/RAN/UE/live&lt;/font&gt;" vertex="1">
+      <mxGeometry height="540" width="540" x="-50" y="1480" as="geometry" />
+    </mxCell>
+    <mxCell id="ARLvhRFmjBG3QmpI7e2_-5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;Next.js Frontend - omniver_frontend&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;IP / Port&lt;/b&gt;:&lt;br&gt; localhost:3001 (host) → container :3000&lt;br&gt;&lt;br&gt;&lt;b&gt;負責做什麼（白話）&lt;/b&gt;：&lt;br&gt;使用者看的網頁、一切從這裡發起。&lt;br&gt;&amp;nbsp;&amp;nbsp;• Dashboard：即時看 UE / gNB 狀態&lt;br&gt;&amp;nbsp;&amp;nbsp;• Trajectory Editor：在 SVG 地圖點 waypoint，按 Apply 套給 UE&lt;br&gt;&amp;nbsp;&amp;nbsp;• Signal History：Recharts 看 RSRP / SINR 時序&lt;br&gt;&lt;br&gt;對 backend 兩條線：&lt;br&gt;&amp;nbsp;&amp;nbsp;• HTTP POST → 所有指令&lt;br&gt;&amp;nbsp;&amp;nbsp;• WS → 訂閱即時 UE snapshot&lt;br&gt;&lt;br&gt;&lt;b&gt;技術&lt;/b&gt;：&lt;br&gt;Next.js 14 + React 18 + TypeScript + Recharts&lt;/font&gt;" vertex="1">
+      <mxGeometry height="560" width="580" x="1530" y="1460" as="geometry" />
+    </mxCell>
+    <mxCell id="ARLvhRFmjBG3QmpI7e2_-6" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;align=left;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;PostgreSQL - omniver_postgres&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;IP / Port&lt;/b&gt;:&lt;br&gt; localhost:5432 (host) → container :5432&lt;br&gt;&lt;br&gt;&lt;b&gt;負責做什麼（白話）&lt;/b&gt;：&lt;br&gt;只存資料，不跑邏輯。8 張表：&lt;br&gt;&amp;nbsp;&amp;nbsp;• scene_snapshot：場景設定快照&lt;br&gt;&amp;nbsp;&amp;nbsp;• ue_config / ue_state：UE 設定 + 即時狀態&lt;br&gt;&amp;nbsp;&amp;nbsp;• gnb_config / gnb_state：gNB 設定 + 即時狀態&lt;br&gt;&amp;nbsp;&amp;nbsp;• position_history：UE 位置時序&lt;br&gt;&amp;nbsp;&amp;nbsp;• signal_history：RSRP / SINR 時序&lt;br&gt;&amp;nbsp;&amp;nbsp;• platform_event：系統事件 log&lt;br&gt;&lt;br&gt;&lt;b&gt;技術&lt;/b&gt;：&lt;br&gt;postgres:16-alpine&lt;br&gt;volume: ./data/pg&lt;/font&gt;" vertex="1">
+      <mxGeometry height="460" width="740" x="730" y="2140" as="geometry" />
+    </mxCell>
+    <mxCell id="ARLvhRFmjBG3QmpI7e2_-7" edge="1" parent="1" source="ARLvhRFmjBG3QmpI7e2_-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.3;exitDx=0;exitDy=0;endArrow=classic;strokeColor=#BE5E00;" target="ARLvhRFmjBG3QmpI7e2_-2">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="-130" y="1642" />
+          <mxPoint x="-130" y="1060" />
+        </Array>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="ARLvhRFmjBG3QmpI7e2_-8" connectable="0" parent="ARLvhRFmjBG3QmpI7e2_-7" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#BE5E00;font-size:11px;&quot;&gt;&lt;b&gt;HTTP POST :8080&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#BE5E00;font-size:10px;&quot;&gt;build / clear / start&lt;br&gt;ue/*/move · ue/*/trajectory · ue/*/signal&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="-40" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_kit_backend_ws" edge="1" parent="1" source="ARLvhRFmjBG3QmpI7e2_-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.7;exitDx=0;exitDy=0;endArrow=classic;strokeColor=#2E7D32;strokeWidth=2;">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="385" y="1100" />
+          <mxPoint x="440" y="1100" />
+        </Array>
+        <mxPoint x="440" y="1479" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_kit_backend_ws_label" connectable="0" parent="e_kit_backend_ws" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#2E7D32;font-size:11px;&quot;&gt;&lt;b&gt;WebSocket :8081&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#2E7D32;font-size:10px;&quot;&gt;Kit 主動推 UE snapshot&lt;br&gt;2 Hz；斷線 backend 指數退避重連&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="30" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_frontend_backend_http" edge="1" parent="1" source="ARLvhRFmjBG3QmpI7e2_-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.3;entryDx=0;entryDy=0;exitX=0;exitY=0.3;exitDx=0;exitDy=0;endArrow=classic;strokeColor=#BE5E00;" target="ARLvhRFmjBG3QmpI7e2_-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_frontend_backend_http_label" connectable="0" parent="e_frontend_backend_http" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#BE5E00;font-size:11px;&quot;&gt;&lt;b&gt;HTTP POST :8001&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#BE5E00;font-size:10px;&quot;&gt;/api/v0.1/RAN/{Scene|UE|GNB|History}/...&lt;br&gt;指令類：scene build · apply trajectory · move ...&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint y="-7" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_backend_frontend_ws" edge="1" parent="1" source="ARLvhRFmjBG3QmpI7e2_-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.7;entryDx=0;entryDy=0;exitX=1;exitY=0.7;exitDx=0;exitDy=0;endArrow=classic;strokeColor=#2E7D32;strokeWidth=2;" target="ARLvhRFmjBG3QmpI7e2_-5">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_backend_frontend_ws_label" connectable="0" parent="e_backend_frontend_ws" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#2E7D32;font-size:11px;&quot;&gt;&lt;b&gt;WebSocket :8001&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#2E7D32;font-size:10px;&quot;&gt;/api/v0.1/RAN/UE/live&lt;br&gt;Backend 主動推即時 UE snapshot 給瀏覽器&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint y="18" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_backend_db" edge="1" parent="1" source="ARLvhRFmjBG3QmpI7e2_-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;endArrow=classic;strokeColor=#6A1B9A;" target="ARLvhRFmjBG3QmpI7e2_-6">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_backend_db_label" connectable="0" parent="e_backend_db" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#6A1B9A;font-size:11px;&quot;&gt;&lt;b&gt;TCP :5432 (SQL)&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#6A1B9A;font-size:10px;&quot;&gt;Django ORM → psycopg2&lt;br&gt;寫 history · 讀 snapshot · migrations&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="dt_network" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#f57c00;verticalAlign=top;fontStyle=1;fontSize=20;fontColor=#e65100;dashed=1;dashPattern=8 4;align=left;spacingLeft=10;spacingTop=6;" value="Docker Network — dt-ueinference_default (compose)" vertex="1">
+      <mxGeometry height="520" width="2260" x="-80" y="2720" as="geometry" />
+    </mxCell>
+    <mxCell id="dt_ueinference" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;dt-ueinference (bridge)&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;IP / Port&lt;/b&gt;:&lt;br&gt; localhost:8002 (host) → container :8000&lt;br&gt;&lt;br&gt;&lt;b&gt;負責做什麼（白話）&lt;/b&gt;：&lt;br&gt;Omniver 跟 ranp-sim 中間的橋，不自己算訊號。&lt;br&gt;&amp;nbsp;&amp;nbsp;• SceneInitializer：首次推一次場景給 ranp-sim&lt;br&gt;&amp;nbsp;&amp;nbsp;• TickRunner：拉 Omniver UE 位置 → 叫 ranp-sim 算 → 推訊號回 Omniver&lt;br&gt;&amp;nbsp;&amp;nbsp;• GnbUpdater/push：Omniver 改 gNB 後轉發到 ranp-sim push_scene(ran_only)&lt;br&gt;&amp;nbsp;&amp;nbsp;• LoopController：訂 Omniver WS，自動每筆 ue_update 觸發一次 tick&lt;br&gt;&lt;br&gt;&lt;b&gt;Scene 來源&lt;/b&gt;：&lt;br&gt;host 的 scene_config.json mount ro 到 /mnt/srcin/&lt;br&gt;&lt;br&gt;&lt;b&gt;技術&lt;/b&gt;：&lt;br&gt;Django 5.1 + requests + websockets&lt;/font&gt;" vertex="1">
+      <mxGeometry height="440" width="600" x="-50" y="2780" as="geometry" />
+    </mxCell>
+    <mxCell id="dt_postgres" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;align=left;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;dt_postgres&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;IP / Port&lt;/b&gt;:&lt;br&gt; localhost:5433 (host) → container :5432&lt;br&gt;&lt;br&gt;&lt;b&gt;負責做什麼（白話）&lt;/b&gt;：&lt;br&gt;只給 dt-ueinference 用，不跟 omniver_postgres 共用。&lt;br&gt;&amp;nbsp;&amp;nbsp;• e2_snapshot：最近 N 筆 E2 報告（KEEP_MAX=500）&lt;br&gt;&amp;nbsp;&amp;nbsp;• tick_log：每次 TickRunner 耗時 / 錯誤&lt;br&gt;&lt;br&gt;&lt;b&gt;技術&lt;/b&gt;：&lt;br&gt;postgres:16-alpine&lt;br&gt;volume: ./data/dt_pg&lt;/font&gt;" vertex="1">
+      <mxGeometry height="400" width="680" x="700" y="2800" as="geometry" />
+    </mxCell>
+    <mxCell id="rps_network" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#388e3c;verticalAlign=top;fontStyle=1;fontSize=20;fontColor=#1b5e20;dashed=1;dashPattern=8 4;align=left;spacingLeft=10;spacingTop=6;" value="Docker Network — ranp-sim_default (compose)" vertex="1">
+      <mxGeometry height="520" width="2260" x="-80" y="3280" as="geometry" />
+    </mxCell>
+    <mxCell id="rps_container" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;" value="&lt;font style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;ranp-sim (Sionna engine)&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;IP / Port&lt;/b&gt;:&lt;br&gt; localhost:8000 (host) → container :8000&lt;br&gt;&lt;br&gt;&lt;b&gt;負責做什麼（白話）&lt;/b&gt;：&lt;br&gt;真正算 RAN 訊號的引擎，要 GPU。&lt;br&gt;&amp;nbsp;&amp;nbsp;• ComputeRunner/compute：給一批 UE 位置算 RSRP/SINR&lt;br&gt;&amp;nbsp;&amp;nbsp;• CoverageRunner/compute：算整片區域 coverage heatmap&lt;br&gt;&amp;nbsp;&amp;nbsp;• push_scene(ran_only)：gNB 變動後整個場景重建（2-5s）&lt;br&gt;&lt;br&gt;&lt;b&gt;資料來源&lt;/b&gt;：&lt;br&gt;&amp;nbsp;&amp;nbsp;• scene_config.json (ro /mnt/srcin/)&lt;br&gt;&amp;nbsp;&amp;nbsp;• Mitsuba XML (/app/scenes/umi_3sector.xml)&lt;br&gt;&lt;br&gt;&lt;b&gt;技術&lt;/b&gt;：&lt;br&gt;Django + Sionna + Mitsuba + CUDA (NVIDIA GPU)&lt;/font&gt;" vertex="1">
+      <mxGeometry height="440" width="600" x="-50" y="3340" as="geometry" />
+    </mxCell>
+    <mxCell id="e_dt_postgres_db" edge="1" parent="1" source="dt_ueinference" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;endArrow=classic;strokeColor=#6A1B9A;" target="dt_postgres">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_dt_postgres_db_label" connectable="0" parent="e_dt_postgres_db" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#6A1B9A;font-size:11px;&quot;&gt;&lt;b&gt;TCP :5432 (SQL)&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#6A1B9A;font-size:10px;&quot;&gt;e2_snapshot · tick_log&lt;br&gt;dt_postgres 獨立，不共用&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_backend_dt_http" edge="1" parent="1" source="ARLvhRFmjBG3QmpI7e2_-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;endArrow=classic;strokeColor=#BE5E00;" target="dt_ueinference">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_backend_dt_http_label" connectable="0" parent="e_backend_dt_http" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#BE5E00;font-size:11px;&quot;&gt;&lt;b&gt;HTTP POST :8002&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#BE5E00;font-size:10px;&quot;&gt;GnbUpdater/push&lt;br&gt;Omniver 改 gNB → 同步給 sim&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="-20" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_dt_backend_http" edge="1" parent="1" source="dt_ueinference" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;endArrow=classic;strokeColor=#BE5E00;" target="ARLvhRFmjBG3QmpI7e2_-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_dt_backend_http_label" connectable="0" parent="e_dt_backend_http" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#BE5E00;font-size:11px;&quot;&gt;&lt;b&gt;HTTP POST :8001&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#BE5E00;font-size:10px;&quot;&gt;SignalIngestor/create (tick 結果)&lt;br&gt;SceneIngestor/create (場景快照)&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="30" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_backend_dt_ws" edge="1" parent="1" source="ARLvhRFmjBG3QmpI7e2_-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;endArrow=classic;strokeColor=#2E7D32;strokeWidth=2;" target="dt_ueinference">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_backend_dt_ws_label" connectable="0" parent="e_backend_dt_ws" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#2E7D32;font-size:11px;&quot;&gt;&lt;b&gt;WebSocket :8001&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#2E7D32;font-size:10px;&quot;&gt;訂 /api/v0.1/RAN/UE/live&lt;br&gt;每筆 ue_update 觸發一次 tick&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_dt_rps_http" edge="1" parent="1" source="dt_ueinference" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=classic;strokeColor=#BE5E00;" target="rps_container">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_dt_rps_http_label" connectable="0" parent="e_dt_rps_http" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#BE5E00;font-size:11px;&quot;&gt;&lt;b&gt;HTTP POST :8000&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#BE5E00;font-size:10px;&quot;&gt;ComputeRunner/compute (每 tick)&lt;br&gt;push_scene(ran_only) (gNB 改動)&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_backend_rps_http" edge="1" parent="1" source="ARLvhRFmjBG3QmpI7e2_-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.9;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;endArrow=classic;strokeColor=#BE5E00;dashed=1;" target="rps_container">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="1450" y="2000" />
+          <mxPoint x="1450" y="3560" />
+        </Array>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_backend_rps_http_label" connectable="0" parent="e_backend_rps_http" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;span style=&quot;color:#BE5E00;font-size:11px;&quot;&gt;&lt;b&gt;HTTP POST :8000&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#BE5E00;font-size:10px;&quot;&gt;CoverageRunner/compute (direct，&lt;br&gt;不經 bridge，算區域覆蓋圖)&lt;/span&gt;" vertex="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1450" y="2800" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="note_scene_config" parent="1" style="shape=note;whiteSpace=wrap;html=1;size=15;fillColor=#fffde7;strokeColor=#f9a825;align=left;fontSize=12;" value="&lt;b&gt;scene_config.json&lt;/b&gt;&lt;br&gt;/home/mitlab/Omniverse/Omniverse/scene_config.json&lt;br&gt;&lt;br&gt;三個系統同時讀這一份（source-of-truth）：&lt;br&gt;&amp;nbsp;• Kit 直接讀 → 建 3D 場景&lt;br&gt;&amp;nbsp;• dt-ueinference mount ro 到 /mnt/srcin/&lt;br&gt;&amp;nbsp;• ranp-sim mount ro 到 /mnt/srcin/&lt;br&gt;&lt;br&gt;⚠ 三方 SCENE_ID 必須一致 (umi_3sector_v1)" vertex="1">
+      <mxGeometry height="220" width="420" x="1730" y="2820" as="geometry" />
+    </mxCell>
+    <mxCell id="note_scene_config_arrow_kit" edge="1" parent="1" source="note_scene_config" target="ARLvhRFmjBG3QmpI7e2_-2" style="edgeStyle=none;rounded=0;html=1;endArrow=open;strokeColor=#f9a825;dashed=1;strokeWidth=1;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="note_scene_config_arrow_dt" edge="1" parent="1" source="note_scene_config" target="dt_ueinference" style="edgeStyle=none;rounded=0;html=1;endArrow=open;strokeColor=#f9a825;dashed=1;strokeWidth=1;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="note_scene_config_arrow_rps" edge="1" parent="1" source="note_scene_config" target="rps_container" style="edgeStyle=none;rounded=0;html=1;endArrow=open;strokeColor=#f9a825;dashed=1;strokeWidth=1;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#616161;align=left;fontSize=11;verticalAlign=top;spacingLeft=8;spacingTop=6;" value="&lt;b style=&quot;font-size:13px;&quot;&gt;Legend&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;span style=&quot;color:#BE5E00;&quot;&gt;━━━&lt;/span&gt; &lt;b&gt;HTTP POST&lt;/b&gt; (指令 / 資料推送)&lt;br&gt;&lt;span style=&quot;color:#BE5E00;&quot;&gt;╌╌╌&lt;/span&gt; HTTP POST dashed = 選擇性 / 直連 (非主路徑)&lt;br&gt;&lt;span style=&quot;color:#2E7D32;&quot;&gt;━━━&lt;/span&gt; &lt;b&gt;WebSocket&lt;/b&gt; (即時串流)&lt;br&gt;&lt;span style=&quot;color:#6A1B9A;&quot;&gt;━━━&lt;/span&gt; &lt;b&gt;SQL&lt;/b&gt; (Postgres TCP :5432)&lt;br&gt;&lt;span style=&quot;color:#f9a825;&quot;&gt;╌╌╌&lt;/span&gt; 共享檔案 (read-only mount)&lt;br&gt;&lt;br&gt;&lt;span style=&quot;color:#1976d2;&quot;&gt;█&lt;/span&gt; omniver_default&lt;br&gt;&lt;span style=&quot;color:#f57c00;&quot;&gt;█&lt;/span&gt; dt-ueinference_default&lt;br&gt;&lt;span style=&quot;color:#388e3c;&quot;&gt;█&lt;/span&gt; ranp-sim_default" vertex="1">
+      <mxGeometry height="260" width="380" x="1770" y="3400" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>

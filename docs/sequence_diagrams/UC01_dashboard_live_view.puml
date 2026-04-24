@@ -1,0 +1,74 @@
+@startuml UC-01_dashboard_live_view
+!pragma teoz true
+
+title "UC-01  操作員查看 Dashboard 即時狀態"
+
+skinparam backgroundColor #ECFFFF
+skinparam roundcorner 15
+skinparam DefaultFontSize 14
+skinparam DefaultFontName Arial
+hide footbox
+skinparam sequenceMessageAlign center
+
+actor Operator as "Operator\n(平台使用者)"
+
+box "omniver_platform [Platform]" #LightYellow
+    box "ran_dt [System]\n\n" #LightBlue
+        box "frontend_view [Module]\n\n" #LightGreen
+            participant DashboardPage as "DashboardPage\n[Composer]"
+        end box
+        box "backend_scene [Module]\n\n" #LightGreen
+            participant SceneLayoutReader as "SceneLayoutReader\n[Actor]"
+            participant SceneStateReader as "SceneStateReader\n[Actor]"
+        end box
+        box "backend_ue [Module]\n\n" #LightGreen
+            participant UEReader as "UEReader\n[Actor]"
+        end box
+    end box
+end box
+
+participant KitRenderServer as "kit_render_server\n[External: Kit :8080]"
+
+activate Operator
+
+group DashboardPage.mount [First Load - 只觸發一次]
+    autonumber 1.1
+    Operator -> DashboardPage : open http://host:3001/
+    activate DashboardPage
+
+    autonumber 1.2
+    DashboardPage -> SceneLayoutReader : POST /RAN/Scene/SceneLayoutReader/read
+    activate SceneLayoutReader
+    SceneLayoutReader -> KitRenderServer : GET /scene/layout
+    activate KitRenderServer
+    KitRenderServer --> SceneLayoutReader : {buildings, gnbs, ues, ground}
+    deactivate KitRenderServer
+    SceneLayoutReader --> DashboardPage : {success, data}
+    deactivate SceneLayoutReader
+end group
+
+group DashboardPage.poll [Every 1s - 輪詢]
+    autonumber 2.1
+    DashboardPage -> SceneStateReader : POST /RAN/Scene/SceneStateReader/read
+    activate SceneStateReader
+    SceneStateReader -> KitRenderServer : GET /scene/status
+    KitRenderServer --> SceneStateReader : {buildings, gnbs, ues, animating}
+    SceneStateReader --> DashboardPage : {success, data}
+    deactivate SceneStateReader
+
+    autonumber 2.2
+    DashboardPage -> UEReader : POST /RAN/UE/UEReader/read
+    activate UEReader
+    UEReader -> KitRenderServer : GET /ues
+    KitRenderServer --> UEReader : [ {name, position, rsrp, sinr, ...}, ... ]
+    UEReader --> DashboardPage : {success, data}
+    deactivate UEReader
+
+    autonumber 2.3
+    DashboardPage -> DashboardPage : 重繪 UE 表格 (位置 / RSRP / SINR)
+end group
+
+deactivate DashboardPage
+deactivate Operator
+
+@enduml

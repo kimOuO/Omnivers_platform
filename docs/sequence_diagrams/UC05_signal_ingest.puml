@@ -1,0 +1,92 @@
+@startuml UC-05_signal_ingest
+!pragma teoz true
+
+title "UC-05  外部 RAN 推訊號 → 前端 Dashboard 更新"
+
+skinparam backgroundColor #ECFFFF
+skinparam roundcorner 15
+skinparam DefaultFontSize 14
+skinparam DefaultFontName Arial
+hide footbox
+skinparam sequenceMessageAlign center
+
+actor ExternalRanSim as "external_ran_sim\n(Sionna DU，平台外部)"
+actor Operator as "Operator\n(前端觀察者)"
+
+box "omniver_platform [Platform]" #LightYellow
+    box "ran_dt [System]\n\n" #LightBlue
+        box "backend_ingest [Module]\n\n" #LightGreen
+            participant SignalIngestor as "SignalIngestor\n[Actor]"
+        end box
+        box "backend_ue [Module]\n\n" #LightGreen
+            participant UEReader as "UEReader\n[Actor]"
+        end box
+        box "frontend_view [Module]\n\n" #LightGreen
+            participant DashboardPage as "DashboardPage\n[Composer]"
+        end box
+    end box
+end box
+
+participant KitRenderServer as "kit_render_server\n[External]"
+database ran_dt_db as "ran_dt_db\n(signal_history, ue_state)"
+
+group SignalIngestor.create [每秒 1 次外部推送]
+    autonumber 1.1
+    ExternalRanSim -> SignalIngestor : POST /RAN/Ingest/SignalIngestor/create\n{ts, signals:[{ue_name, rsrp_dbm, sinr_db, ...}]}
+    activate SignalIngestor
+
+    autonumber 1.2
+    SignalIngestor -> SignalIngestor : SignalBatchWriteSerializer.is_valid()
+
+    loop 對每筆 signal
+        autonumber 1.3
+        SignalIngestor -> ran_dt_db : create_entity(SignalHistory, ...)
+        activate ran_dt_db
+        ran_dt_db --> SignalIngestor : row written
+        deactivate ran_dt_db
+
+        autonumber 1.4
+        SignalIngestor -> ran_dt_db : upsert_entity(UeState,\n{serving_cell, rsrp, sinr})
+        activate ran_dt_db
+        ran_dt_db --> SignalIngestor : (instance, created)
+        deactivate ran_dt_db
+
+        autonumber 1.5
+        SignalIngestor -> KitRenderServer : POST /ue/{name}/signal\n{serving_cell, rsrp, sinr, rsrp_map}
+        activate KitRenderServer
+        KitRenderServer -> KitRenderServer : enqueue "push_signal" cmd\n→ 寫 USD custom attrs\n   (ran:serving_cell,\n    ran:rsrp_dbm, ran:sinr_db)
+        KitRenderServer --> SignalIngestor : {status:"queued"}
+        deactivate KitRenderServer
+    end
+
+    autonumber 1.6
+    SignalIngestor --> ExternalRanSim : {success, data:{accepted:N, kit_errors:0}}
+    deactivate SignalIngestor
+
+    autonumber 1.7
+    note over KitRenderServer
+        mitlab.ran.labels extension 下一幀讀取新的
+        ran:rsrp_dbm / ran:sinr_db，重繪 UE 頭上
+        billboard 文字 (RSRP 變色，綠/橘/紅)
+    end note
+end group
+
+group DashboardPage.poll [Operator 看到數值更新]
+    autonumber 2.1
+    Operator -> DashboardPage : (被動觀察，每秒 poll 一次)
+    activate DashboardPage
+
+    autonumber 2.2
+    DashboardPage -> UEReader : POST /RAN/UE/UEReader/read
+    activate UEReader
+    UEReader -> KitRenderServer : GET /ues
+    KitRenderServer --> UEReader : [ {name, rsrp:-78.2, sinr:12.5, ...}, ... ]
+    UEReader --> DashboardPage : {success, data}
+    deactivate UEReader
+
+    autonumber 2.3
+    DashboardPage -> DashboardPage : UE 表格的 RSRP/SINR 格子更新
+    deactivate DashboardPage
+end group
+
+@enduml

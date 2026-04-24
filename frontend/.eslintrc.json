@@ -1,0 +1,43 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "overrides": [
+    {
+      "files": ["services/**/*.ts", "services/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["@/components/*", "@/hooks/*"], "message": "services/ may only import from types/, config/ (see frontend_rule.md)" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["hooks/**/*.ts", "hooks/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["@/components/*"], "message": "hooks/ MUST NOT import from components/ (see frontend_rule.md)" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["app/**/*.ts", "app/**/*.tsx"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "CallExpression[callee.name='fetch']",
+            "message": "app/ MUST NOT call fetch/axios directly. Use services/ (see frontend_rule.md)."
+          }
+        ]
+      }
+    }
+  ]
+}

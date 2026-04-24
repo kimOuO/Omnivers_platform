@@ -1,0 +1,21 @@
+[package]
+title = "RAN UE Labels"
+version = "0.5.3"
+description = "2D HUD overlay labels above UE/gNB. Event-driven via USD Tf.Notice: refresh only when UE/gNB/camera changes. Idle = zero work."
+category = "Visualization"
+keywords = ["ran", "hud", "label"]
+
+[dependencies]
+"omni.ui" = {}
+"omni.kit.viewport.utility" = {}
+"omni.kit.viewport.window" = {}
+"omni.usd" = {}
+
+[settings]
+
+[[python.module]]
+name = "mitlab.ran.labels"
+
+[[test]]
+dependencies = []
+args = []

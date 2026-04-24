@@ -1,0 +1,116 @@
+@startuml UC-04_trajectory_edit
+!pragma teoz true
+
+title "UC-04  操作員編輯 UE 軌跡並套用"
+
+skinparam backgroundColor #ECFFFF
+skinparam roundcorner 15
+skinparam DefaultFontSize 14
+skinparam DefaultFontName Arial
+hide footbox
+skinparam sequenceMessageAlign center
+
+actor Operator as "Operator"
+
+box "omniver_platform [Platform]" #LightYellow
+    box "ran_dt [System]\n\n" #LightBlue
+        box "frontend_view [Module]\n\n" #LightGreen
+            participant TopDownMap as "TopDownMap\n[Component]"
+            participant TrajectoryEditor as "TrajectoryEditor\n[Composer]"
+        end box
+        box "backend_scene [Module]\n\n" #LightGreen
+            participant SceneLayoutReader as "SceneLayoutReader\n[Actor]"
+        end box
+        box "backend_ue [Module]\n\n" #LightGreen
+            participant UEReader as "UEReader\n[Actor]"
+            participant UEController as "UEController\n[Actor]"
+        end box
+    end box
+end box
+
+participant KitRenderServer as "kit_render_server\n[External]"
+database ran_dt_db as "ran_dt_db\n(ue_config table)"
+
+activate Operator
+
+group TrajectoryEditor.mount [頁面載入 - 取地圖底圖]
+    autonumber 1.1
+    Operator -> TrajectoryEditor : 打開 /trajectory
+    activate TrajectoryEditor
+
+    autonumber 1.2
+    TrajectoryEditor -> SceneLayoutReader : POST /RAN/Scene/SceneLayoutReader/read
+    activate SceneLayoutReader
+    SceneLayoutReader -> KitRenderServer : GET /scene/layout
+    KitRenderServer --> SceneLayoutReader : {buildings, gnbs, ues, ground}
+    SceneLayoutReader --> TrajectoryEditor : {success, data}
+    deactivate SceneLayoutReader
+
+    autonumber 1.3
+    TrajectoryEditor -> TopDownMap : render(buildings, gnbs, ues)
+end group
+
+group TrajectoryEditor.poll [Every 1s - UE 即時位置]
+    autonumber 2.1
+    TrajectoryEditor -> UEReader : POST /RAN/UE/UEReader/read
+    UEReader --> TrajectoryEditor : {success, data:[...ue...]}
+end group
+
+group Operator interaction [互動編輯]
+    autonumber 3.1
+    Operator -> TopDownMap : 點擊空白處
+    TopDownMap -> TrajectoryEditor : addWaypoint(x, z)
+
+    autonumber 3.2
+    Operator -> TopDownMap : 拖曳 waypoint
+    TopDownMap -> TrajectoryEditor : moveWaypoint(idx, x, z)
+
+    autonumber 3.3
+    Operator -> TopDownMap : 右鍵 waypoint
+    TopDownMap -> TrajectoryEditor : removeWaypoint(idx)
+
+    autonumber 3.4
+    Operator -> TrajectoryEditor : 調整 speed slider / Loop checkbox
+end group
+
+group UEController.trajectory [Apply 送出]
+    autonumber 4.1
+    Operator -> TrajectoryEditor : 點 [Apply]
+
+    autonumber 4.2
+    TrajectoryEditor -> UEController : POST /RAN/UE/UEController/trajectory\n{name, waypoints, speed_mps, loop}
+    activate UEController
+
+    autonumber 4.3
+    UEController -> UEController : UeTrajectoryWriteSerializer.is_valid()
+
+    autonumber 4.4
+    UEController -> ran_dt_db : SqlDbBusinessService.upsert_entity(UeConfig, ...)
+    activate ran_dt_db
+    ran_dt_db --> UEController : (instance, created)
+    deactivate ran_dt_db
+
+    autonumber 4.5
+    UEController -> KitRenderServer : POST /ue/{name}/trajectory\n{waypoints, speed_mps, loop}
+    activate KitRenderServer
+    KitRenderServer -> KitRenderServer : enqueue "update_trajectory" cmd
+    KitRenderServer --> UEController : {status:"queued"}
+    deactivate KitRenderServer
+
+    autonumber 4.6
+    UEController --> TrajectoryEditor : {success, message:"queued", data:{name, waypoints_count}}
+    deactivate UEController
+
+    autonumber 4.7
+    note over KitRenderServer
+        下一幀 Kit 執行：
+         builder.update_trajectory(name, waypoints, speed, loop)
+         → 更新 _animated_ues 的 waypoints
+         → VNC 的 UE 角色立刻改走新路徑
+    end note
+end group
+
+deactivate TrajectoryEditor
+deactivate Operator
+
+@enduml
