@@ -10,9 +10,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 KIT_FILE="${HERE}/ran_server.kit"
 
-# Scene config for mitlab.ran.scene.builder (legacy path uses ~/omniverse/scene_config.json).
+# Scene config for mitlab.ran.scene.builder (stored in project root).
 # Override via env before calling this script if needed.
-export RAN_SCENE_CONFIG="${RAN_SCENE_CONFIG:-${HERE}/../../scene_config.json}"
+export RAN_SCENE_CONFIG="${RAN_SCENE_CONFIG:-${HERE}/../scene_config.json}"
 
 # Activate venv if not already
 if [ -z "${VIRTUAL_ENV:-}" ]; then
