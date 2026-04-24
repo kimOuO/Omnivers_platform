@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # =========================================================================
+  # Omniverse Kit with Xvfb, VNC, and noVNC
+  # =========================================================================
+  kit-vnc:
+    build:
+      context: .
+      dockerfile: Dockerfile.kit-vnc
+    image: ran-omniverse-kit:latest
+    container_name: ran_kit_vnc
+
+    # GPU support (required for Omniverse Kit rendering)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # Volumes
+    volumes:
+      # Mount local directories
+      - ./kit:/home/omniverse/kit:ro
+      - ./extensions:/home/omniverse/extensions:ro
+      - ./scene_config.json:/home/omniverse/scene_config.json:ro
+
+      # Persistent storage
+      - kit-cache:/home/omniverse/.nvidia-omniverse
+      - kit-logs:/tmp/logs
+
+    # Ports
+    ports:
+      # VNC
+      - "5900:5900"
+      # noVNC Web
+      - "6080:6080"
+      # Kit HTTP API
+      - "8080:8080"
+
+    # Environment variables
+    environment:
+      DISPLAY: ":99"
+      DISPLAY_SIZE: "2560x1440"
+      DISPLAY_DEPTH: "24"
+      VNC_PORT: "5900"
+      VNC_WEB_PORT: "6080"
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,graphics,display"
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "5900"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Resource limits (optional)
+    # Uncomment to limit resources
+    # mem_limit: 16g
+    # cpus: '4'
+
+  # =========================================================================
+  # PostgreSQL Database
+  # =========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: omniver_postgres
+
+    environment:
+      POSTGRES_USER: ran
+      POSTGRES_PASSWORD: ran_password
+      POSTGRES_DB: ran_dt
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    ports:
+      - "5432:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ran"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    restart: unless-stopped
+
+  # =========================================================================
+  # Django Backend
+  # =========================================================================
+  backend:
+    build:
+      context: ./Omniver-RAN
+      dockerfile: Dockerfile
+    container_name: omniver_backend
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DATABASE_URL: postgresql://ran:ran_password@postgres:5432/ran_dt
+      DEBUG: "False"
+      ALLOWED_HOSTS: "*"
+
+    volumes:
+      - ./Omniver-RAN:/app
+
+    ports:
+      - "8001:8000"
+
+    command: sh -c "
+      python manage.py migrate &&
+      python manage.py runserver 0.0.0.0:8000
+      "
+
+    restart: unless-stopped
+
+  # =========================================================================
+  # Next.js Frontend
+  # =========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: omniver_frontend
+
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000
+      NODE_ENV: development
+
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+    ports:
+      - "3001:3000"
+
+    restart: unless-stopped
+
+volumes:
+  kit-cache:
+    driver: local
+  kit-logs:
+    driver: local
+  postgres-data:
+    driver: local
+
+networks:
+  default:
+    name: ran-network
+    driver: bridge
