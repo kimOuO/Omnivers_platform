@@ -238,6 +238,10 @@ class RANAPIHandler(BaseHTTPRequestHandler):
             if parts == ["scene", "config"]:
                 body = self._read_body()
                 ext._runtime_config = body
+                import os
+                config_file = os.path.expanduser("~/.omniverse_runtime_config.json")
+                with open(config_file, "w") as f:
+                    json.dump(body, f)
                 ext._enqueue("build_scene"); self._send_json({"status": "queued"}); return
             if parts == ["animation", "start"]:
                 ext._enqueue("start_animation"); self._send_json({"status": "queued"}); return
@@ -275,7 +279,10 @@ class RANAPIHandler(BaseHTTPRequestHandler):
 
 class RANAPIExtension(omni.ext.IExt):
 
+    _instance = None
+
     def on_startup(self, ext_id):
+        RANAPIExtension._instance = self
         print("[mitlab.ran.api] Extension startup")
         self._command_queue = []
         self._queue_lock = threading.Lock()
@@ -303,6 +310,7 @@ class RANAPIExtension(omni.ext.IExt):
         print(f"[mitlab.ran.api] HTTP :{API_PORT}  WS :{ws_server.WS_PORT}")
 
     def on_shutdown(self):
+        RANAPIExtension._instance = None
         self._update_sub = None
         self._stop_server()
         # WS shutdown: close listener synchronously so port frees immediately,

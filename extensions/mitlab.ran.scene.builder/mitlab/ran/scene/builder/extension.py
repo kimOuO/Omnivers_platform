@@ -40,17 +40,12 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print("[mitlab.ran.scene.builder] Extension shutdown")
 
     def _load_config(self):
-        # Priority: runtime_config (from API POST /scene/config) > env var RAN_SCENE_CONFIG > legacy file
-        api_ext = None
-        try:
-            from mitlab.ran.api.extension import RANAPIExtension
-            api_ext = RANAPIExtension._instance
-        except Exception:
-            pass
-
-        if api_ext is not None and hasattr(api_ext, "_runtime_config") and api_ext._runtime_config:
-            print("[RAN] Loading config from runtime (API)")
-            return api_ext._runtime_config
+        # Priority: runtime_config file (from API POST /scene/config) > env var RAN_SCENE_CONFIG > legacy file
+        runtime_config_file = os.path.expanduser("~/.omniverse_runtime_config.json")
+        if os.path.exists(runtime_config_file):
+            print("[RAN] Loading config from runtime file (API)")
+            with open(runtime_config_file, "r") as f:
+                return json.load(f)
 
         env_path = os.environ.get("RAN_SCENE_CONFIG")
         if env_path:
