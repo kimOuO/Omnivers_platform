@@ -87,10 +87,11 @@ class ObstacleController:
             return error_response(f"Obstacle '{name}' not found", status=404)
 
         s = ObstacleWriteSerializer(data=data)
-        if not s.is_valid():
-            return error_response("Validation failed", s.errors, 400)
+        # 更新時只允許修改 USD 規範的屬性（position, size, color, scale, material, usd_path）
+        v = s._validate_update(data)
+        if not v:
+            return error_response("No editable USD fields provided (allowed: position, size, color, scale, material, usd_path)", status=400)
 
-        v = s.validated_data
         v["obstacle_updated_at"] = TimestampService.get_current_timestamp()
 
         updated = SqlDbBusinessService.update_entity(obstacle, v)

@@ -77,6 +77,75 @@ class ObstacleWriteSerializer(Serializer):
             "scene_id": scene_id or "",
         }
 
+    def _validate_update(self, data: dict[str, Any]) -> dict[str, Any]:
+        """更新時只允許修改 USD 規範的屬性"""
+        result = {}
+
+        # Handle position as array or individual fields
+        position = self._optional(data, "position", (list, tuple))
+        if position:
+            result["pos_x"] = float(position[0]) if len(position) > 0 else None
+            result["pos_y"] = float(position[1]) if len(position) > 1 else None
+            result["pos_z"] = float(position[2]) if len(position) > 2 else None
+        else:
+            if "pos_x" in data:
+                result["pos_x"] = float(data["pos_x"])
+            if "pos_y" in data:
+                result["pos_y"] = float(data["pos_y"])
+            if "pos_z" in data:
+                result["pos_z"] = float(data["pos_z"])
+
+        # Handle size as array or individual fields
+        size = self._optional(data, "size", (list, tuple))
+        if size:
+            result["size_x"] = float(size[0]) if len(size) > 0 else None
+            result["size_y"] = float(size[1]) if len(size) > 1 else None
+            result["size_z"] = float(size[2]) if len(size) > 2 else None
+        else:
+            if "size_x" in data:
+                result["size_x"] = float(data["size_x"])
+            if "size_y" in data:
+                result["size_y"] = float(data["size_y"])
+            if "size_z" in data:
+                result["size_z"] = float(data["size_z"])
+
+        # Handle color as array or individual fields
+        color = self._optional(data, "color", (list, tuple))
+        if color:
+            result["color_r"] = float(color[0]) if len(color) > 0 else None
+            result["color_g"] = float(color[1]) if len(color) > 1 else None
+            result["color_b"] = float(color[2]) if len(color) > 2 else None
+        else:
+            if "color_r" in data:
+                result["color_r"] = float(data["color_r"])
+            if "color_g" in data:
+                result["color_g"] = float(data["color_g"])
+            if "color_b" in data:
+                result["color_b"] = float(data["color_b"])
+
+        # Handle scale as array or individual fields
+        scale = self._optional(data, "scale", (list, tuple))
+        if scale:
+            result["scale_x"] = float(scale[0]) if len(scale) > 0 else None
+            result["scale_y"] = float(scale[1]) if len(scale) > 1 else None
+            result["scale_z"] = float(scale[2]) if len(scale) > 2 else None
+        else:
+            if "scale_x" in data:
+                result["scale_x"] = float(data["scale_x"])
+            if "scale_y" in data:
+                result["scale_y"] = float(data["scale_y"])
+            if "scale_z" in data:
+                result["scale_z"] = float(data["scale_z"])
+
+        # Editable USD properties
+        if "usd_path" in data:
+            result["usd_path"] = data["usd_path"] or ""
+        if "material" in data:
+            result["material"] = data["material"] or ""
+
+        # Remove None values
+        return {k: v for k, v in result.items() if v is not None}
+
 
 class ObstacleReadSerializer(Serializer):
     @classmethod

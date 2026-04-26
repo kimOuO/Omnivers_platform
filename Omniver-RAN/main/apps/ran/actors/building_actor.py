@@ -87,10 +87,11 @@ class BuildingController:
             return error_response(f"Building '{name}' not found", status=404)
 
         s = BuildingWriteSerializer(data=data)
-        if not s.is_valid():
-            return error_response("Validation failed", s.errors, 400)
+        # 更新時只允許修改 USD 規範的屬性（position, size, color, rotation, material, usd_path, target_height_m）
+        v = s._validate_update(data)
+        if not v:
+            return error_response("No editable USD fields provided (allowed: position, size, color, rotation_xyz_deg, material, usd_path, target_height_m)", status=400)
 
-        v = s.validated_data
         v["building_updated_at"] = TimestampService.get_current_timestamp()
 
         updated = SqlDbBusinessService.update_entity(building, v)
