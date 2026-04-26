@@ -1,0 +1,12 @@
+#usda 1.0
+(
+    defaultPrim = "Building"
+    upAxis = "Y"
+    metersPerUnit = 1.0
+)
+
+def Xform "Building" (
+    prepend references = @/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Revit_Brownstone01_Exterior.usd@
+)
+{
+}

@@ -11,9 +11,9 @@ echo "[kit-entrypoint] Using display $DISPLAY"
 # Clean up any stale lock files
 rm -f /tmp/.X99-lock /tmp/.X11-unix/99 2>/dev/null || true
 
-# Start Xvfb with GLX explicitly enabled (必須放在前面)
+# Start Xvfb with indirect GLX for GPU rendering in virtual environment
 echo "[kit-entrypoint] Starting Xvfb..."
-Xvfb $DISPLAY +iglx +extension GLX -screen 0 1920x1080x24 +extension RENDER +extension Composite -dpi 96 > /tmp/xvfb.log 2>&1 &
+Xvfb $DISPLAY +iglx +extension GLX -screen 0 1920x1080x24 +extension RENDER +extension Composite +extension XFIXES -dpi 96 > /tmp/xvfb.log 2>&1 &
 XVFB_PID=$!
 sleep 3
 
@@ -31,10 +31,11 @@ xrandr --newmode "1920x1080_60" 173.00 1920 2048 2248 2576 1080 1083 1088 1120 -
 xrandr --addmode default "1920x1080_60" 2>/dev/null || true
 xrandr --output default --mode "1920x1080_60" 2>/dev/null || true
 
-# Start VNC (disable shared memory completely to avoid shmget errors)
+# Start VNC with improved settings for complex scenes
 echo "[kit-entrypoint] Starting x11vnc..."
 nohup x11vnc -display $DISPLAY -nopw -forever -shared -rfbport 5900 \
-    -noxdamage -noscr -nowf -noxfixes -ncache 0 -noshm > /tmp/x11vnc.log 2>&1 &
+    -noxdamage -noscr -nowf -noxfixes -ncache 0 -noshm \
+    -q -bg > /tmp/x11vnc.log 2>&1 &
 X11VNC_PID=$!
 sleep 2
 if ps -p $X11VNC_PID > /dev/null 2>&1; then
@@ -63,9 +64,9 @@ export RAN_SCENE_CONFIG=/app/scene_config.json
 export OMNI_KIT_ALLOW_ROOT=1
 
 # GPU rendering configuration
-export EGL_PLATFORM=surfaceless
-export LIBGL_ALWAYS_INDIRECT=1
-export CUDA_LAUNCH_BLOCKING=1
+export CUDA_LAUNCH_BLOCKING=0
+export NVIDIA_VISIBLE_DEVICES=all
+export NVIDIA_DRIVER_CAPABILITIES=graphics,compute,utility
 
 source /opt/omniverse-env/bin/activate
 

@@ -1,0 +1,94 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                   RAN 數字孿生場景 - 快速參考卡                              ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📍 所在目錄：
+   /home/mitlab/XAPP_DT/Omnivers_platform/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【第一步】查看當前配置
+
+   python3 configure_scene.py list
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【第二步】修改配置
+
+📦 修改 Building 高度
+   python3 configure_scene.py building --name Building_1 --height 500
+
+📡 修改 gNB 高度
+   python3 configure_scene.py gnb --name gNB_Macro_NW --height 500
+
+👤 修改 UE 速度
+   python3 configure_scene.py ue --name UE_1 --speed 20
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【第三步】應用變更到場景
+
+   python3 configure_scene.py apply
+
+   ⏱️  耗時：10-15 秒
+   🖥️  查看：http://localhost:6080 (VNC)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【常用命令】
+
+📊 查看所有對象
+   python3 configure_scene.py list
+
+🏢 Building 相關
+   python3 configure_scene.py building --name Building_1 --height 500
+   python3 configure_scene.py building --name Building_2 --position 400 0 0
+   python3 configure_scene.py building --name Building_1 --color 1.0 0.0 0.0
+
+📡 gNB 相關
+   python3 configure_scene.py gnb --name gNB_Macro_NW --height 600
+   python3 configure_scene.py gnb --name gNB_Macro_NW --power 45
+   python3 configure_scene.py gnb --name gNB_Macro_NW --frequency 2.6
+
+👤 UE 相關
+   python3 configure_scene.py ue --name UE_1 --speed 20
+   python3 configure_scene.py ue --name UE_2 --height 50
+   python3 configure_scene.py ue --name UE_3 --position 200 0 200
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【當前配置狀態】
+
+✓ Buildings:          2 (Building_1, Building_2) - 400m 高度
+✓ Obstacles:          4 (Building_3~6)
+✓ gNBs:               3 (Macro_NW, Macro_SE, Micro_Central) - 400m 高度
+✓ UEs:                5 (各有不同速度和路徑)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【進階】直接編輯配置文件
+
+   nano scene_config.json              # 編輯
+   python3 -m json.tool scene_config.json > /dev/null  # 驗證語法
+   python3 configure_scene.py apply    # 應用
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【幫助】
+
+   python3 configure_scene.py --help
+
+📖 詳細手冊：
+   cat SCENE_CONTROL_MANUAL.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+技巧：
+  • 修改後記得執行 apply 才會生效
+  • 無需重啟 container，直接 apply 即可
+  • VNC 刷新需要 10-15 秒，耐心等待
+  • 如果看不到變化，清除緩存再試：
+    docker exec omniver_kit rm -rf /root/.local/share/ov/data/Kit/ran_server
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+最後更新：2026-04-26

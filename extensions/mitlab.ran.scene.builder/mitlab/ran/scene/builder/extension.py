@@ -348,6 +348,8 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             if (not render_only_gnb) and (not skip_buildings):
                 for b in config["buildings"]:
                     self._build_building(stage, b)
+                for o in config.get("obstacles", []):
+                    self._build_building(stage, o)
             for g in config["gnbs"]:
                 self._build_gnb(stage, g)
 
@@ -360,9 +362,14 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             if render_only_gnb:
                 self._status.text = f"Done! {len(config['gnbs'])} gNBs (render_only_gnb=true)"
             else:
-                b_count = 0 if skip_buildings else len(config.get("buildings") or [])
+                if skip_buildings:
+                    b_count = 0
+                    o_count = 0
+                else:
+                    b_count = len(config.get("buildings") or [])
+                    o_count = len(config.get("obstacles") or [])
                 u_count = 0 if skip_ues else len(config.get("ues") or [])
-                self._status.text = f"Done! {b_count} buildings, {len(config['gnbs'])} gNBs, {u_count} UEs"
+                self._status.text = f"Done! {b_count} buildings, {o_count} obstacles, {len(config['gnbs'])} gNBs, {u_count} UEs"
             print("[RAN] Scene build complete")
 
             if self._animated_ues:
@@ -376,36 +383,46 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
     def _build_lights(self, stage):
         """Create a distant sun light so the scene is visible."""
-        from pxr import UsdLux
-        light_path = "/World/SunLight"
-        if stage.GetPrimAtPath(light_path).IsValid():
-            return  # already exists
-
-        light = UsdLux.DistantLight.Define(stage, light_path).GetPrim()
-        if not light.IsValid():
-            print("[RAN] Failed to create distant light")
+        try:
+            from pxr import UsdLux
+        except ImportError:
+            print("[RAN] UsdLux not available, skipping light creation")
             return
 
-        # Intensity attribute (UsdLux)
-        intensity_attr = light.GetAttribute("inputs:intensity")
-        if not intensity_attr:
-            intensity_attr = light.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float)
-        intensity_attr.Set(3000.0)
-        angle_attr = light.GetAttribute("inputs:angle")
-        if angle_attr:
-            angle_attr.Set(0.53)
+        light_path = "/World/SunLight"
+        existing_light = stage.GetPrimAtPath(light_path)
+        if existing_light.IsValid():
+            print("[RAN] SunLight already exists, updating intensity")
+            # Update intensity if it already exists
+            try:
+                intensity_attr = existing_light.GetAttribute("inputs:intensity")
+                if intensity_attr:
+                    intensity_attr.Set(3000.0)
+            except:
+                pass
+            return
 
-        # Rotate -45deg on X so light comes from upper direction
-        xformable = UsdGeom.Xformable(light)
-        existing_ops = {op.GetOpName(): op for op in xformable.GetOrderedXformOps()}
-        if "xformOp:rotateXYZ" in existing_ops:
-            existing_ops["xformOp:rotateXYZ"].Set(Gf.Vec3f(-45.0, 0.0, 0.0))
-        else:
+        # Create distant light using UsdLux API
+        try:
+            light = UsdLux.DistantLight.Define(stage, light_path)
+            if not light or not light.GetPrim().IsValid():
+                print("[RAN] Failed to create distant light (Define returned invalid prim)")
+                return
+
+            # Set intensity and angle
+            light.GetIntensityAttr().Set(3000.0)
+            light.GetAngleAttr().Set(0.53)
+
+            # Rotate -45deg on X so light comes from upper direction
+            light_prim = light.GetPrim()
+            xformable = UsdGeom.Xformable(light_prim)
             xformable.AddRotateXYZOp(
                 precision=UsdGeom.XformOp.PrecisionFloat
             ).Set(Gf.Vec3f(-45.0, 0.0, 0.0))
 
-        print("[RAN] SunLight created")
+            print("[RAN] SunLight created with intensity 3000")
+        except Exception as e:
+            print(f"[RAN] Failed to create distant light: {e}")
 
     def _frame_camera(self, config=None):
         """Auto-frame the viewport camera to fit key prims (UE + gNB) for better visibility."""
@@ -771,7 +788,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         name = config["name"]
         pos = config["position"]
         size = config["size"]
-        color = config["color"]
+        color = config.get("color", [0.75, 0.75, 0.75])  # Default gray if not specified
 
         building_usd = config.get("usd")
 
@@ -846,7 +863,12 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         # Visual scaling: allow per-gNB scale override, otherwise use global config.
         global_scale = float((self._config or {}).get("gnb_visual_scale") or 1.0)
         gnb_scale = float(config.get("scale") or global_scale or 1.0)
-        height = float(pos[1]) * gnb_scale
+        # Support target_height_m for consistent sizing with buildings
+        target_h = config.get("target_height_m")
+        if target_h is not None:
+            height = float(target_h)
+        else:
+            height = float(pos[1]) * gnb_scale
 
         container_path = f"/World/{name}"
         UsdGeom.Xform.Define(stage, container_path)
@@ -907,7 +929,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             prim = self._add_reference(stage, container_path, ue_asset_usd)
             if prim is not None and prim.IsValid():
                 self._set_xform(prim, translate=(float(pos[0]), float(pos[1]), float(pos[2])))
-                target_height_m = float(config.get("target_height_m") or ue_asset_cfg.get("target_height_m") or 1.7)
+                target_height_m = float(config.get("target_height_m") or ue_asset_cfg.get("target_height_m") or 34.0)
                 self._scale_prim_to_target_height(stage, prim, target_height_m=target_height_m)
                 self._align_prim_to_ground_y(stage, prim, desired_ground_y=float(pos[1]))
             print(f"[RAN] UE '{name}' as character reference")

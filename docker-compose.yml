@@ -102,8 +102,6 @@ services:
     volumes:
       - /home/mitlab/XAPP_DT/Omnivers_platform:/home/mitlab/XAPP_DT/Omnivers_platform  # access host assets via absolute path
       - /home/mitlab/XAPP_DT/Omnivers_platform/extensions:/app/extensions  # extensions live reload
-      - /home/mitlab/Demos:/home/mitlab/Demos  # AEC demo assets
-      - /home/mitlab/Omnivers_USD_DB:/home/mitlab/Omnivers_USD_DB  # USD database (Brownstone assets)
       - /home/mitlab/XAPP_DT/Omnivers_platform/scene_config.json:/app/scene_config.json  # live config reload (overrides COPY'd version)
     ipc: host
     shm_size: 2gb

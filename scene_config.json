@@ -10,7 +10,7 @@
     {
       "name": "Building_1",
       "position": [
-        0,
+        -300,
         0,
         0
       ],
@@ -19,108 +19,32 @@
         100,
         30
       ],
-      "color": [
-        0.5,
-        0.7,
-        0.9
-      ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/Brownstone_Wrapper.usda"
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/Brownstone01_Building.usda",
+      "target_height_m": 400,
+      "rotation_xyz_deg": [
+        -90,
+        0,
+        0
+      ]
     },
     {
       "name": "Building_2",
       "position": [
-        100,
+        300,
         0,
-        50
+        0
       ],
       "size": [
         80,
         30,
         60
       ],
-      "color": [
-        0.7,
-        0.75,
-        0.8
-      ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/Brownstone02_Wrapper.usda"
-    },
-    {
-      "name": "Building_3",
-      "position": [
-        -100,
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/Brownstone02_Building.usda",
+      "target_height_m": 500,
+      "rotation_xyz_deg": [
+        -90,
         0,
-        -80
-      ],
-      "size": [
-        120,
-        20,
-        100
-      ],
-      "color": [
-        0.72,
-        0.36,
-        0.28
-      ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/factory.usda",
-      "scale": [
-        1.0,
-        1.0,
-        1.0
-      ]
-    },
-    {
-      "name": "Building_4",
-      "position": [
-        50,
-        0,
-        -100
-      ],
-      "size": [
-        60,
-        40,
-        50
-      ],
-      "color": [
-        0.5,
-        0.7,
-        0.9
-      ]
-    },
-    {
-      "name": "Building_5",
-      "position": [
-        -80,
-        0,
-        100
-      ],
-      "size": [
-        100,
-        15,
-        80
-      ],
-      "color": [
-        0.3,
-        0.3,
-        0.3
-      ]
-    },
-    {
-      "name": "Building_6",
-      "position": [
-        150,
-        0,
-        150
-      ],
-      "size": [
-        40,
-        50,
-        40
-      ],
-      "color": [
-        0.6,
-        0.6,
-        0.6
+        0
       ]
     }
   ],
@@ -140,7 +64,8 @@
       "frequency_ghz": 3.5,
       "power_dbm": 43,
       "bandwidth_mhz": 100,
-      "active": true
+      "active": true,
+      "target_height_m": 400
     },
     {
       "name": "gNB_Macro_SE",
@@ -157,7 +82,8 @@
       "frequency_ghz": 3.5,
       "power_dbm": 40,
       "bandwidth_mhz": 100,
-      "active": true
+      "active": true,
+      "target_height_m": 400
     },
     {
       "name": "gNB_Micro_Central",
@@ -174,7 +100,8 @@
       "frequency_ghz": 2.6,
       "power_dbm": 20,
       "bandwidth_mhz": 20,
-      "active": true
+      "active": true,
+      "target_height_m": 400
     }
   ],
   "ues": [
@@ -192,11 +119,7 @@
         1.0
       ],
       "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
-      "scale": [
-        5.0,
-        5.0,
-        5.0
-      ],
+      "target_height_m": 50.0,
       "speed_mps": 10.0,
       "waypoints": [
         [
@@ -241,11 +164,7 @@
       ],
       "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/male_party.usda",
       "speed_mps": 0,
-      "scale": [
-        5.0,
-        5.0,
-        5.0
-      ]
+      "target_height_m": 34.0
     },
     {
       "name": "UE_3",
@@ -262,6 +181,7 @@
       ],
       "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
       "speed_mps": 5.0,
+      "target_height_m": 34.0,
       "waypoints": [
         [
           0,
@@ -278,11 +198,6 @@
           0,
           0
         ]
-      ],
-      "scale": [
-        5.0,
-        5.0,
-        5.0
       ]
     },
     {
@@ -300,6 +215,7 @@
       ],
       "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/male_party.usda",
       "speed_mps": 15.0,
+      "target_height_m": 34.0,
       "waypoints": [
         [
           -100,
@@ -316,11 +232,6 @@
           0,
           100
         ]
-      ],
-      "scale": [
-        5.0,
-        5.0,
-        5.0
       ]
     },
     {
@@ -338,6 +249,7 @@
       ],
       "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
       "speed_mps": 8.0,
+      "target_height_m": 34.0,
       "waypoints": [
         [
           150,
@@ -364,12 +276,91 @@
           0,
           150
         ]
-      ],
-      "scale": [
-        5.0,
-        5.0,
-        5.0
       ]
+    }
+  ],
+  "obstacles": [
+    {
+      "name": "Building_3",
+      "position": [
+        -100,
+        0,
+        -80
+      ],
+      "size": [
+        120,
+        20,
+        100
+      ],
+      "color": [
+        0.72,
+        0.36,
+        0.28
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/factory.usda",
+      "material": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Materials/STONE_PAVERS.mdl",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "name": "Building_4",
+      "position": [
+        50,
+        0,
+        -100
+      ],
+      "size": [
+        60,
+        40,
+        50
+      ],
+      "color": [
+        0.5,
+        0.7,
+        0.9
+      ],
+      "material": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Materials/Cladding_Pella_White.mdl"
+    },
+    {
+      "name": "Building_5",
+      "position": [
+        -80,
+        0,
+        100
+      ],
+      "size": [
+        100,
+        15,
+        80
+      ],
+      "color": [
+        0.3,
+        0.3,
+        0.3
+      ],
+      "material": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Materials/Rigid_insulation.mdl"
+    },
+    {
+      "name": "Building_6",
+      "position": [
+        150,
+        0,
+        150
+      ],
+      "size": [
+        40,
+        50,
+        40
+      ],
+      "color": [
+        0.6,
+        0.6,
+        0.6
+      ],
+      "material": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Materials/Default_New_Material.mdl"
     }
   ]
 }

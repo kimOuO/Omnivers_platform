@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.0-base-ubuntu22.04
+FROM nvidia/cuda:12.6.0-base-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 # Install omniverse-kit from NVIDIA PyPI (pip, ~1.6GB, uses build cache)
 RUN python3 -m venv /opt/omniverse-env \
     && /opt/omniverse-env/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/omniverse-env/bin/pip install --no-cache-dir omniverse-kit==106.0.3.138428 \
+    && /opt/omniverse-env/bin/pip install --no-cache-dir omniverse-kit==110.0.0.276876 \
         --extra-index-url https://pypi.nvidia.com
 
 # EULA will be auto-accepted by wrapper script (run_kit.py)
