@@ -13,12 +13,14 @@ from main.apps.ran.actors.gnb_actor import GNBController, GNBReader
 from main.apps.ran.actors.history_actor import PositionHistoryReader, SignalHistoryReader
 from main.apps.ran.actors.ingest_actor import SceneIngestor, SignalIngestor
 from main.apps.ran.actors.platform_actor import PlatformReporter
+from main.apps.ran.actors.playback_actor import PlaybackController
 from main.apps.ran.actors.scene_actor import (
     AnimationController,
     SceneController,
     SceneLayoutReader,
     SceneStateReader,
 )
+from main.apps.ran.actors.sim_session_actor import SimSessionController
 from main.apps.ran.actors.ue_actor import UEController, UEReader
 
 urlpatterns = [
@@ -49,4 +51,12 @@ urlpatterns = [
 
     # ---- RAN/Platform ----
     path("RAN/Platform/PlatformReporter/create", PlatformReporter.create, name="platform_report"),
+
+    # ---- RAN/SimSession ----
+    path("RAN/SimSession/SimSessionController/create", SimSessionController.create, name="sim_session_create"),
+    path("RAN/SimSession/SimSessionController/end", SimSessionController.end, name="sim_session_end"),
+
+    # ---- RAN/SimSession/Playback ----
+    path("RAN/SimSession/PlaybackController/list", PlaybackController.list, name="playback_list"),
+    path("RAN/SimSession/PlaybackController/read", PlaybackController.read, name="playback_read"),
 ]

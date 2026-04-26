@@ -8,9 +8,10 @@ from main.apps.ran.serializers._base import Serializer
 class SignalBatchWriteSerializer(Serializer):
     def _validate_write(self, data: dict[str, Any]) -> dict[str, Any]:
         ts = self._optional(data, "ts", str)
+        session_uuid = self._optional(data, "session_uuid", str)
         signals = self._require(data, "signals", list)
         if signals is None:
-            return {"ts": ts, "signals": []}
+            return {"ts": ts, "session_uuid": session_uuid, "signals": []}
         cleaned: list[dict[str, Any]] = []
         for i, s in enumerate(signals):
             if not isinstance(s, dict):
@@ -36,4 +37,4 @@ class SignalBatchWriteSerializer(Serializer):
                 "sinr_db": float(sinr_db),
                 "rsrp_map": {str(k): float(v) for k, v in rsrp_map.items()},
             })
-        return {"ts": ts, "signals": cleaned}
+        return {"ts": ts, "session_uuid": session_uuid, "signals": cleaned}

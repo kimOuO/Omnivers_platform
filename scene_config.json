@@ -1,68 +1,142 @@
 {
-  "environment": {
-    "description": "背景環境資源",
-    "usd": "file:///path/to/environment.usd"
-  },
   "ground": {
-    "description": "地面材質設定",
     "material": "grass",
-    "size": [1000, 1000]
+    "size": [
+      1000,
+      1000
+    ]
   },
   "buildings": [
     {
       "name": "Building_1",
-      "description": "辦公大樓 A",
-      "position": [0, 0, 0],
-      "size": [50, 30, 100],
-      "material": "concrete",
-      "usd": "file:///path/to/building_a.usd"
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "size": [
+        50,
+        100,
+        30
+      ],
+      "color": [
+        0.5,
+        0.7,
+        0.9
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/Brownstone_Wrapper.usda"
     },
     {
       "name": "Building_2",
-      "description": "工業廠房",
-      "position": [100, 50, 0],
-      "size": [80, 60, 30],
-      "material": "steel",
-      "usd": "file:///path/to/building_b.usd"
+      "position": [
+        100,
+        0,
+        50
+      ],
+      "size": [
+        80,
+        30,
+        60
+      ],
+      "color": [
+        0.7,
+        0.75,
+        0.8
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/Brownstone02_Wrapper.usda"
     },
     {
       "name": "Building_3",
-      "description": "住宅區",
-      "position": [-100, -80, 0],
-      "size": [120, 100, 20],
-      "material": "brick",
-      "usd": "file:///path/to/building_c.usd"
+      "position": [
+        -100,
+        0,
+        -80
+      ],
+      "size": [
+        120,
+        20,
+        100
+      ],
+      "color": [
+        0.72,
+        0.36,
+        0.28
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/factory.usda",
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
     },
     {
       "name": "Building_4",
-      "description": "商場",
-      "position": [50, -100, 0],
-      "size": [60, 50, 40],
-      "material": "glass",
-      "usd": "file:///path/to/building_d.usd"
+      "position": [
+        50,
+        0,
+        -100
+      ],
+      "size": [
+        60,
+        40,
+        50
+      ],
+      "color": [
+        0.5,
+        0.7,
+        0.9
+      ]
     },
     {
       "name": "Building_5",
-      "description": "停車場",
-      "position": [-80, 100, 0],
-      "size": [100, 80, 15],
-      "material": "asphalt",
-      "usd": "file:///path/to/building_e.usd"
+      "position": [
+        -80,
+        0,
+        100
+      ],
+      "size": [
+        100,
+        15,
+        80
+      ],
+      "color": [
+        0.3,
+        0.3,
+        0.3
+      ]
     },
     {
       "name": "Building_6",
-      "description": "數據中心",
-      "position": [150, 150, 0],
-      "size": [40, 40, 50],
-      "material": "concrete",
-      "usd": "file:///path/to/building_f.usd"
+      "position": [
+        150,
+        0,
+        150
+      ],
+      "size": [
+        40,
+        50,
+        40
+      ],
+      "color": [
+        0.6,
+        0.6,
+        0.6
+      ]
     }
   ],
   "gnbs": [
     {
       "name": "gNB_Macro_NW",
-      "description": "宏基站 - 西北塔",
-      "position": [200, 200, 50],
+      "position": [
+        200,
+        50,
+        200
+      ],
+      "color": [
+        1.0,
+        0.6,
+        0.0
+      ],
       "frequency_ghz": 3.5,
       "power_dbm": 43,
       "bandwidth_mhz": 100,
@@ -70,8 +144,16 @@
     },
     {
       "name": "gNB_Macro_SE",
-      "description": "宏基站 - 東南塔",
-      "position": [-200, -200, 45],
+      "position": [
+        -200,
+        45,
+        -200
+      ],
+      "color": [
+        1.0,
+        0.4,
+        0.2
+      ],
       "frequency_ghz": 3.5,
       "power_dbm": 40,
       "bandwidth_mhz": 100,
@@ -79,8 +161,16 @@
     },
     {
       "name": "gNB_Micro_Central",
-      "description": "微基站 - 中心",
-      "position": [0, 0, 30],
+      "position": [
+        0,
+        30,
+        0
+      ],
+      "color": [
+        0.2,
+        0.8,
+        0.4
+      ],
       "frequency_ghz": 2.6,
       "power_dbm": 20,
       "bandwidth_mhz": 20,
@@ -90,87 +180,196 @@
   "ues": [
     {
       "name": "UE_Handover_Path",
-      "description": "切換路徑 UE",
       "prim_path": "/World/UE_Handover_Path",
-      "position": [0, 0, 1.7],
-      "speed": 10.0,
-      "trajectory": {
-        "waypoints": [
-          [0, 0, 1.7],
-          [50, 50, 1.7],
-          [100, 100, 1.7],
-          [50, 50, 1.7],
-          [0, 0, 1.7]
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "color": [
+        0.2,
+        0.8,
+        1.0
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
+      "scale": [
+        5.0,
+        5.0,
+        5.0
+      ],
+      "speed_mps": 10.0,
+      "waypoints": [
+        [
+          0,
+          0,
+          0
         ],
-        "loop": true
-      }
+        [
+          50,
+          0,
+          50
+        ],
+        [
+          100,
+          0,
+          100
+        ],
+        [
+          50,
+          0,
+          50
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
     },
     {
       "name": "UE_2",
-      "description": "靜止 UE",
       "prim_path": "/World/UE_2",
-      "position": [100, 0, 1.7],
-      "speed": 0,
-      "trajectory": null
+      "position": [
+        100,
+        0,
+        0
+      ],
+      "color": [
+        0.5,
+        1.0,
+        0.5
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/male_party.usda",
+      "speed_mps": 0,
+      "scale": [
+        5.0,
+        5.0,
+        5.0
+      ]
     },
     {
       "name": "UE_3",
-      "description": "移動 UE",
       "prim_path": "/World/UE_3",
-      "position": [0, 100, 1.7],
-      "speed": 5.0,
-      "trajectory": {
-        "waypoints": [
-          [0, 100, 1.7],
-          [100, 100, 1.7],
-          [100, 0, 1.7]
+      "position": [
+        0,
+        0,
+        100
+      ],
+      "color": [
+        1.0,
+        0.5,
+        0.8
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
+      "speed_mps": 5.0,
+      "waypoints": [
+        [
+          0,
+          0,
+          100
         ],
-        "loop": true
-      }
+        [
+          100,
+          0,
+          100
+        ],
+        [
+          100,
+          0,
+          0
+        ]
+      ],
+      "scale": [
+        5.0,
+        5.0,
+        5.0
+      ]
     },
     {
       "name": "UE_4",
-      "description": "高速移動 UE",
       "prim_path": "/World/UE_4",
-      "position": [-100, 100, 1.7],
-      "speed": 15.0,
-      "trajectory": {
-        "waypoints": [
-          [-100, 100, 1.7],
-          [100, -100, 1.7],
-          [-100, 100, 1.7]
+      "position": [
+        -100,
+        0,
+        100
+      ],
+      "color": [
+        1.0,
+        0.9,
+        0.2
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/male_party.usda",
+      "speed_mps": 15.0,
+      "waypoints": [
+        [
+          -100,
+          0,
+          100
         ],
-        "loop": true
-      }
+        [
+          100,
+          0,
+          -100
+        ],
+        [
+          -100,
+          0,
+          100
+        ]
+      ],
+      "scale": [
+        5.0,
+        5.0,
+        5.0
+      ]
     },
     {
       "name": "UE_5",
-      "description": "園區巡迴 UE",
       "prim_path": "/World/UE_5",
-      "position": [150, 150, 1.7],
-      "speed": 8.0,
-      "trajectory": {
-        "waypoints": [
-          [150, 150, 1.7],
-          [150, -150, 1.7],
-          [-150, -150, 1.7],
-          [-150, 150, 1.7],
-          [150, 150, 1.7]
+      "position": [
+        150,
+        0,
+        150
+      ],
+      "color": [
+        0.8,
+        0.4,
+        1.0
+      ],
+      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
+      "speed_mps": 8.0,
+      "waypoints": [
+        [
+          150,
+          0,
+          150
         ],
-        "loop": true
-      }
+        [
+          150,
+          0,
+          -150
+        ],
+        [
+          -150,
+          0,
+          -150
+        ],
+        [
+          -150,
+          0,
+          150
+        ],
+        [
+          150,
+          0,
+          150
+        ]
+      ],
+      "scale": [
+        5.0,
+        5.0,
+        5.0
+      ]
     }
-  ],
-  "metadata": {
-    "description": "RAN 數字孿生場景配置",
-    "version": "1.0",
-    "created": "2026-04-24",
-    "author": "RAN Team",
-    "notes": [
-      "建築物位置和大小是相對的，可根據實際場景調整",
-      "基站頻率、功率和帶寬是示例值",
-      "UE 軌跡定義了 lat/lon/altitude，loop 表示是否循環",
-      "所有位置都基於笛卡爾坐標系"
-    ]
-  }
+  ]
 }

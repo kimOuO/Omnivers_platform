@@ -6,6 +6,7 @@ from main.apps.ran.models.ue_state import UeState
 from main.apps.ran.models.position_history import PositionHistory
 from main.apps.ran.models.signal_history import SignalHistory
 from main.apps.ran.models.platform_event import PlatformEvent
+from main.apps.ran.models.simulation_session import SimulationSession
 
 __all__ = [
     "SceneSnapshot",
@@ -16,4 +17,5 @@ __all__ = [
     "PositionHistory",
     "SignalHistory",
     "PlatformEvent",
+    "SimulationSession",
 ]

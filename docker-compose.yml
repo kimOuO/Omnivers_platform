@@ -1,6 +1,6 @@
-# Full-stack dev compose: Postgres + Django backend + Next.js frontend.
-# Kit (Omniverse) runs on the host (GPU/VNC reasons); backend reaches it via
-# host.docker.internal:8080.
+# Full-stack dev compose: Postgres + Django backend + Next.js frontend + Kit (Omniverse).
+# Kit runs in a containerized Omniverse environment with Xvfb, x11vnc, and noVNC.
+# Backend connects to Kit container via http://kit:8080 (internal DNS).
 #
 # Usage:
 #   docker compose up -d              # start all 3 services
@@ -21,7 +21,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./data/pg:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ran -d ran_dt"]
       interval: 5s
@@ -46,15 +46,15 @@ services:
       DB_NAME: ran_dt
       DB_USER: ran
       DB_PASSWORD: ran
-      HTTP_KIT_HOST: host.docker.internal   # reach Kit running on host
+      HTTP_KIT_HOST: kit                    # reach Kit container via internal DNS
       HTTP_KIT_PORT: "8080"
       WS_KIT_PORT: "8081"                   # Kit's WS snapshot push port
       LOG_LEVEL: INFO
-    extra_hosts:
-      - "host.docker.internal:host-gateway" # Linux: expose host via this name
     depends_on:
       postgres:
         condition: service_healthy
+      kit:
+        condition: service_started
     # Dev mode: migrate then start Daphne (ASGI) so HTTP + WebSocket both work.
     # Daphne is also in INSTALLED_APPS first, so `manage.py runserver` would
     # auto-detect ASGI — but we use daphne directly for production parity.
@@ -85,6 +85,31 @@ services:
       - backend
     restart: unless-stopped
 
+  kit:
+    build:
+      context: .
+      dockerfile: kit/Dockerfile
+    container_name: omniver_kit
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+    ports:
+      - "8080:8080"   # Kit HTTP API
+      - "8081:8081"   # Kit WebSocket snapshot
+      - "5900:5900"   # VNC (optional, can be removed)
+      - "6080:6080"   # noVNC Web interface
+    volumes:
+      - /home/mitlab/XAPP_DT/Omnivers_platform:/home/mitlab/XAPP_DT/Omnivers_platform  # access host assets via absolute path
+      - /home/mitlab/XAPP_DT/Omnivers_platform/extensions:/app/extensions  # extensions live reload
+      - /home/mitlab/Demos:/home/mitlab/Demos  # AEC demo assets
+      - /home/mitlab/Omnivers_USD_DB:/home/mitlab/Omnivers_USD_DB  # USD database (Brownstone assets)
+      - /home/mitlab/XAPP_DT/Omnivers_platform/scene_config.json:/app/scene_config.json  # live config reload (overrides COPY'd version)
+    ipc: host
+    shm_size: 2gb
+    restart: unless-stopped
+
 volumes:
+  postgres-data:
   frontend_node_modules:
   frontend_next_cache:

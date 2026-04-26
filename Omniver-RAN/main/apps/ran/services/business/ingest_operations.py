@@ -27,13 +27,14 @@ class IngestBusinessService:
 
     @staticmethod
     @transaction.atomic
-    def ingest_signals(signals: list[dict[str, Any]], ts=None) -> dict[str, int]:
+    def ingest_signals(signals: list[dict[str, Any]], ts=None, session_uuid=None) -> dict[str, int]:
         """寫入 signal_history / ue_state 並 push 給 Kit。
 
         Args:
             signals: [{ue_name, serving_cell, rsrp_dbm, sinr_db, rsrp_map}, ...]
                      已 validate 過的乾淨資料
             ts: 時間戳 (datetime) — 不給則用現在
+            session_uuid: 可選，來自 RAN-sim 的 session identifier
 
         Returns:
             {"accepted": N, "kit_errors": K}
@@ -46,6 +47,7 @@ class IngestBusinessService:
             SqlDbBusinessService.create_entity(
                 SignalHistory,
                 {
+                    "session_uuid": session_uuid,
                     "signal_uuid": UUIDService.random_uuid(),
                     "ue_name": sig["ue_name"],
                     "serving_cell": sig["serving_cell"],

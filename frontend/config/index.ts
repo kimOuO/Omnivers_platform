@@ -1,10 +1,10 @@
 // Static configuration only. No runtime logic. No React. No network.
 
 export const API_BASE_URL: string =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8001';
 
 export const WS_URL: string =
-  process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8000/api/ws/live';
+  process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8001/api/v0.1/RAN/UE/live';
 
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 

@@ -34,7 +34,8 @@ class SignalIngestor:
         v = s.validated_data
 
         ts = TimestampService.parse_iso(v["ts"]) if v.get("ts") else TimestampService.get_current_timestamp()
-        result = IngestBusinessService.ingest_signals(v["signals"], ts=ts)
+        session_uuid = v.get("session_uuid")  # 可選，由 RAN-sim 提供
+        result = IngestBusinessService.ingest_signals(v["signals"], ts=ts, session_uuid=session_uuid)
         return success_response(result)
 
 

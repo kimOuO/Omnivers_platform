@@ -1,0 +1,17 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    upAxis = "Y"
+    metersPerUnit = 1.0
+)
+
+def Xform "Root"
+{
+    def Xform "Character" (
+        prepend references = @./Party_M_0001/party-m-0001.usd@
+    )
+    {
+        float3 xformOp:scale = (0.00864, 0.00864, 0.00864)
+        uniform token[] xformOpOrder = ["xformOp:scale"]
+    }
+}

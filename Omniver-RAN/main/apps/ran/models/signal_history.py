@@ -3,6 +3,7 @@ from django.db import models
 
 class SignalHistory(models.Model):
     id = models.AutoField(primary_key=True)
+    session_uuid = models.CharField(max_length=255, null=True, blank=True, db_index=True)
     signal_uuid = models.CharField(max_length=255, unique=True, db_index=True)
     ue_name = models.CharField(max_length=128, db_index=True)
     serving_cell = models.CharField(max_length=128)
@@ -14,4 +15,7 @@ class SignalHistory(models.Model):
     class Meta:
         app_label = "ran"
         db_table = "signal_history"
-        indexes = [models.Index(fields=["ue_name", "signal_ts"], name="ix_sigh_ue_ts")]
+        indexes = [
+            models.Index(fields=["ue_name", "signal_ts"], name="ix_sigh_ue_ts"),
+            models.Index(fields=["session_uuid", "signal_ts"], name="ix_sigh_session_ts"),
+        ]

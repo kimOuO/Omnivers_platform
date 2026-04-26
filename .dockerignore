@@ -1,0 +1,22 @@
+.git
+.gitignore
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.local
+node_modules
+.next
+dist
+build
+.DS_Store
+*.log
+data/pg
+Omniver-RAN/.venv
+frontend/node_modules
+.vscode
+.idea
+# Don't include large zip files in build context
+Omnivers_USD_DB/
+*.zip

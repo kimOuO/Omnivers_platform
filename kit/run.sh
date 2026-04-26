@@ -14,6 +14,10 @@ KIT_FILE="${HERE}/ran_server.kit"
 # Override via env before calling this script if needed.
 export RAN_SCENE_CONFIG="${RAN_SCENE_CONFIG:-${HERE}/../scene_config.json}"
 
+# Virtual display for rendering (Xvfb).
+# Use :88 for local VNC via x11vnc, or set via env before calling if needed.
+export DISPLAY="${DISPLAY:-:88}"
+
 # Activate venv if not already
 if [ -z "${VIRTUAL_ENV:-}" ]; then
   if [ -f "${HOME}/omniverse-env/bin/activate" ]; then
@@ -29,4 +33,9 @@ echo "[run.sh] Launching Kit with ${KIT_FILE}"
 
 # Pass the .kit path as a positional argument (not --/app/file/default=,
 # which is "USD file to open" and makes Kit auto-quit since no run loop is defined).
-exec python -m omni.kit_app "${KIT_FILE}" "$@"
+# Force window display for VNC remote viewing
+exec python -m omni.kit_app "${KIT_FILE}" \
+  --/app/window/show=true \
+  --/app/window/width=1920 \
+  --/app/window/height=1080 \
+  "$@"

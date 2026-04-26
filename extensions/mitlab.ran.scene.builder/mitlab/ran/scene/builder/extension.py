@@ -71,7 +71,11 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
         prim = self._ensure_xform(stage, prim_path)
         prim.GetReferences().ClearReferences()
+
+        # Simple approach: just add the reference to the entire asset
+        # USD will handle composition correctly
         prim.GetReferences().AddReference(asset_path)
+
         # Some assets use payloads; force-load so geometry appears.
         try:
             prim.Load()
@@ -289,13 +293,24 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 ).Set(Gf.Vec3f(float(rotate_xyz_deg[0]), float(rotate_xyz_deg[1]), float(rotate_xyz_deg[2])))
 
     def _build_scene(self):
+        print("[RAN] _build_scene() called")
         self._stop_animation()
         self._animated_ues = []
         self._status.text = "Building..."
         try:
             config = self._load_config()
+            print(f"[RAN] Config loaded, ground: {bool(config.get('ground'))}, buildings: {len(config.get('buildings', []))}")
             self._config = config
-            stage = omni.usd.get_context().get_stage()
+            usd_context = omni.usd.get_context()
+            stage = usd_context.get_stage()
+
+            if stage is None:
+                print("[RAN] No stage found; creating new stage...")
+                usd_context.new_stage()
+                stage = usd_context.get_stage()
+
+            if stage is None:
+                raise RuntimeError("Failed to create or get USD stage")
 
             UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
             UsdGeom.SetStageMetersPerUnit(stage, 1.0)
@@ -361,21 +376,21 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
     def _build_lights(self, stage):
         """Create a distant sun light so the scene is visible."""
+        from pxr import UsdLux
         light_path = "/World/SunLight"
         if stage.GetPrimAtPath(light_path).IsValid():
             return  # already exists
 
-        omni.kit.commands.execute("CreatePrimCommand",
-            prim_type="DistantLight", prim_path=light_path)
-        light = stage.GetPrimAtPath(light_path)
+        light = UsdLux.DistantLight.Define(stage, light_path).GetPrim()
         if not light.IsValid():
             print("[RAN] Failed to create distant light")
             return
 
         # Intensity attribute (UsdLux)
         intensity_attr = light.GetAttribute("inputs:intensity")
-        if intensity_attr:
-            intensity_attr.Set(3000.0)
+        if not intensity_attr:
+            intensity_attr = light.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float)
+        intensity_attr.Set(3000.0)
         angle_attr = light.GetAttribute("inputs:angle")
         if angle_attr:
             angle_attr.Set(0.53)
@@ -740,16 +755,17 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         sx = float(config["size"][0])
         sz = float(config["size"][1])
 
-        omni.kit.commands.execute("CreatePrimCommand",
-            prim_type="Cube", prim_path=path)
-
-        prim = stage.GetPrimAtPath(path)
+        print(f"[RAN] Creating Ground at {path}...")
+        prim = UsdGeom.Cube.Define(stage, path).GetPrim()
+        print(f"[RAN] Ground prim valid: {prim.IsValid()}")
         if prim.IsValid():
             UsdGeom.Cube(prim).GetSizeAttr().Set(1.0)
             self._set_xform(prim, translate=(0, -0.5, 0), scale=(sx, 1.0, sz))
             UsdGeom.Gprim(prim).CreateDisplayColorPrimvar(
                 UsdGeom.Tokens.constant).Set([Gf.Vec3f(0.3, 0.5, 0.3)])
             print(f"[RAN] Ground created: {config['size']}")
+        else:
+            print(f"[RAN] Ground prim not valid!")
 
     def _build_building(self, stage, config):
         name = config["name"]
@@ -808,10 +824,10 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         cube_path = f"{container_path}/Mesh"
 
         UsdGeom.Xform.Define(stage, container_path)
-        omni.kit.commands.execute("CreatePrimCommand",
-            prim_type="Cube", prim_path=cube_path)
+        print(f"[RAN] Creating Building '{name}' cube at {cube_path}...")
+        prim = UsdGeom.Cube.Define(stage, cube_path).GetPrim()
+        print(f"[RAN] Building '{name}' prim valid: {prim.IsValid()}")
 
-        prim = stage.GetPrimAtPath(cube_path)
         if prim.IsValid():
             UsdGeom.Cube(prim).GetSizeAttr().Set(1.0)
             self._set_xform(prim,
@@ -820,6 +836,8 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             UsdGeom.Gprim(prim).CreateDisplayColorPrimvar(
                 UsdGeom.Tokens.constant).Set([Gf.Vec3f(*color)])
             print(f"[RAN] Building '{name}' at {pos}, size {size}")
+        else:
+            print(f"[RAN] Building '{name}' prim not valid!")
 
     def _build_gnb(self, stage, config):
         name = config["name"]
