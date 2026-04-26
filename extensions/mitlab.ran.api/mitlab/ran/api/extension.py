@@ -235,6 +235,10 @@ class RANAPIHandler(BaseHTTPRequestHandler):
                 ext._enqueue("build_scene"); self._send_json({"status": "queued"}); return
             if parts == ["scene", "clear"]:
                 ext._enqueue("clear_scene"); self._send_json({"status": "queued"}); return
+            if parts == ["scene", "config"]:
+                body = self._read_body()
+                ext._runtime_config = body
+                ext._enqueue("build_scene"); self._send_json({"status": "queued"}); return
             if parts == ["animation", "start"]:
                 ext._enqueue("start_animation"); self._send_json({"status": "queued"}); return
             if parts == ["animation", "stop"]:
@@ -280,6 +284,7 @@ class RANAPIExtension(omni.ext.IExt):
         self._ws_task = None
         self._ws_server = None
         self._ws_clients = set()
+        self._runtime_config = None
 
         self._start_server()
         self._update_sub = omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(
@@ -345,7 +350,7 @@ class RANAPIExtension(omni.ext.IExt):
                 "GET  /scene/status",
                 "GET  /gnbs", "GET  /gnb/{name}",
                 "GET  /ues",  "GET  /ue/{name}",
-                "POST /scene/build", "POST /scene/clear",
+                "POST /scene/build", "POST /scene/clear", "POST /scene/config",
                 "POST /animation/start", "POST /animation/stop",
                 "POST /ue/{name}/move       body={x,y,z}",
                 "POST /ue/{name}/trajectory body={waypoints,speed_mps,loop}",

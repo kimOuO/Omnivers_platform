@@ -47,6 +47,10 @@ class KitBusinessService:
         KitBusinessService._post("/scene/build")
 
     @staticmethod
+    def push_scene_config(config_dict: dict[str, Any]) -> None:
+        KitBusinessService._post("/scene/config", config_dict)
+
+    @staticmethod
     def clear_scene() -> None:
         KitBusinessService._post("/scene/clear")
 

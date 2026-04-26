@@ -9,6 +9,13 @@ class GnbConfig(models.Model):
     power_dbm = models.FloatField()
     bw_hz = models.FloatField()
     active = models.BooleanField(default=True)
+    pos_x = models.FloatField(default=0)
+    pos_y = models.FloatField(default=0)
+    pos_z = models.FloatField(default=0)
+    color_r = models.FloatField(default=1.0)
+    color_g = models.FloatField(default=1.0)
+    color_b = models.FloatField(default=1.0)
+    target_height_m = models.FloatField(null=True, blank=True)
     gnb_created_at = models.DateTimeField(auto_now_add=True)
     gnb_updated_at = models.DateTimeField(auto_now=True)
 

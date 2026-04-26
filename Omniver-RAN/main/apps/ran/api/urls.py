@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from django.urls import path
 
+from main.apps.ran.actors.building_actor import BuildingController
 from main.apps.ran.actors.gnb_actor import GNBController, GNBReader
 from main.apps.ran.actors.history_actor import PositionHistoryReader, SignalHistoryReader
 from main.apps.ran.actors.ingest_actor import SceneIngestor, SignalIngestor
+from main.apps.ran.actors.obstacle_actor import ObstacleController
 from main.apps.ran.actors.platform_actor import PlatformReporter
 from main.apps.ran.actors.playback_actor import PlaybackController
 from main.apps.ran.actors.scene_actor import (
@@ -31,6 +33,14 @@ urlpatterns = [
     path("RAN/Scene/SceneController/clear", SceneController.clear, name="scene_clear"),
     path("RAN/Scene/AnimationController/start", AnimationController.start, name="anim_start"),
     path("RAN/Scene/AnimationController/stop", AnimationController.stop, name="anim_stop"),
+    path("RAN/Scene/BuildingController/create", BuildingController.create, name="building_create"),
+    path("RAN/Scene/BuildingController/read", BuildingController.read, name="building_read"),
+    path("RAN/Scene/BuildingController/update", BuildingController.update, name="building_update"),
+    path("RAN/Scene/BuildingController/delete", BuildingController.delete, name="building_delete"),
+    path("RAN/Scene/ObstacleController/create", ObstacleController.create, name="obstacle_create"),
+    path("RAN/Scene/ObstacleController/read", ObstacleController.read, name="obstacle_read"),
+    path("RAN/Scene/ObstacleController/update", ObstacleController.update, name="obstacle_update"),
+    path("RAN/Scene/ObstacleController/delete", ObstacleController.delete, name="obstacle_delete"),
 
     # ---- RAN/UE ----
     path("RAN/UE/UEReader/read", UEReader.read, name="ue_read"),

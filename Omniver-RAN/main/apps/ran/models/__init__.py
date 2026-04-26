@@ -7,6 +7,8 @@ from main.apps.ran.models.position_history import PositionHistory
 from main.apps.ran.models.signal_history import SignalHistory
 from main.apps.ran.models.platform_event import PlatformEvent
 from main.apps.ran.models.simulation_session import SimulationSession
+from main.apps.ran.models.building_object import BuildingObject
+from main.apps.ran.models.obstacle_object import ObstacleObject
 
 __all__ = [
     "SceneSnapshot",
@@ -18,4 +20,6 @@ __all__ = [
     "SignalHistory",
     "PlatformEvent",
     "SimulationSession",
+    "BuildingObject",
+    "ObstacleObject",
 ]
