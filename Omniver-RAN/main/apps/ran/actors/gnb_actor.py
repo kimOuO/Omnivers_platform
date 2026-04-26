@@ -40,14 +40,20 @@ class GNBController:
         data, err = parse_body(request)
         if err is not None:
             return err
-        s = GnbStateWriteSerializer(data=data)
-        if not s.is_valid():
-            return error_response("Validation failed", s.errors, 400)
-        v = s.validated_data
 
-        cfg = SqlDbBusinessService.find_entity(GnbConfig, name=v["name"])
+        name = data.get("name")
+        if not name or not isinstance(name, str):
+            return error_response("Validation failed", {"name": "required (str)"}, 400)
+
+        cfg = SqlDbBusinessService.find_entity(GnbConfig, name=name)
         if cfg is None:
-            return error_response(f"gNB '{v['name']}' not found", status=404)
+            return error_response(f"gNB '{name}' not found", status=404)
+
+        s = GnbStateWriteSerializer(data=data)
+        # 更新時只允許修改 USD 規範的屬性（position, power_dbm, frequency_ghz, bandwidth_mhz, active, color, target_height_m）
+        v = s._validate_update(data)
+        if not v:
+            return error_response("No editable USD fields provided (allowed: position, power_dbm, frequency_ghz, bandwidth_mhz, active, color, target_height_m)", status=400)
 
         # ---- DB updates (canonical values for ranp-sim etc.) ----
         updates: dict = {"gnb_updated_at": TimestampService.get_current_timestamp()}
@@ -59,6 +65,18 @@ class GNBController:
             updates["freq_mhz"] = float(v["frequency_ghz"]) * 1000.0
         if v.get("bandwidth_mhz") is not None:
             updates["bw_hz"] = float(v["bandwidth_mhz"]) * 1_000_000.0
+        if v.get("position") is not None:
+            updates["pos_x"] = float(v["position"]["x"])
+            updates["pos_y"] = float(v["position"]["y"])
+            updates["pos_z"] = float(v["position"]["z"])
+        if v.get("color_r") is not None:
+            updates["color_r"] = v["color_r"]
+        if v.get("color_g") is not None:
+            updates["color_g"] = v["color_g"]
+        if v.get("color_b") is not None:
+            updates["color_b"] = v["color_b"]
+        if v.get("target_height_m") is not None:
+            updates["target_height_m"] = v["target_height_m"]
         SqlDbBusinessService.update_entity(cfg, updates)
 
         # ---- Kit forward (reflect in viewport + HUD label) ----
@@ -69,11 +87,11 @@ class GNBController:
         kit_err: str | None = None
         if kit_changes:
             try:
-                KitBusinessService.update_gnb(v["name"], kit_changes)
+                KitBusinessService.update_gnb(name, kit_changes)
             except Exception as e:  # noqa: BLE001
                 # DB already updated; viewport just didn't get the push.
                 # Report back so caller knows to retry or inspect.
-                log.warning("GNBController.update: Kit push failed for %s: %s", v["name"], e)
+                log.warning("GNBController.update: Kit push failed for %s: %s", name, e)
                 kit_err = str(e)
 
         # ---- Direct push to ranp-sim (override_mode=ran_only) ----
@@ -88,10 +106,10 @@ class GNBController:
             if scene_id and all_gnbs:
                 bridge_resp = RanpsimBusinessService.push_scene(scene_id, all_gnbs)
         except Exception as e:  # noqa: BLE001
-            log.warning("GNBController.update: ranp-sim push failed for %s: %s", v["name"], e)
+            log.warning("GNBController.update: ranp-sim push failed for %s: %s", name, e)
             bridge_err = str(e)
 
-        payload: dict = {"name": v["name"], "applied": list(kit_changes.keys())}
+        payload: dict = {"name": name, "applied": list(kit_changes.keys())}
         if kit_err is not None:
             payload["kit_error"] = kit_err
         if bridge_err is not None:

@@ -49,3 +49,38 @@ class GnbStateWriteSerializer(Serializer):
             "bandwidth_mhz": float(bw_mhz) if bw_mhz is not None else None,
             "position": position,
         }
+
+    def _validate_update(self, data: dict[str, Any]) -> dict[str, Any]:
+        """更新時只允許修改 USD 規範的屬性"""
+        result = {}
+
+        # Handle position
+        if "position" in data:
+            pos_raw = data.get("position")
+            position = _as_xyz(pos_raw) if pos_raw is not None else None
+            if position:
+                result["position"] = position
+
+        # Editable RF parameters
+        if "power_dbm" in data:
+            result["power_dbm"] = float(data["power_dbm"])
+        if "frequency_ghz" in data:
+            result["frequency_ghz"] = float(data["frequency_ghz"])
+        if "bandwidth_mhz" in data:
+            result["bandwidth_mhz"] = float(data["bandwidth_mhz"])
+        if "active" in data:
+            result["active"] = bool(data["active"])
+
+        # Color (USD display property)
+        if "color" in data:
+            color = data["color"]
+            if isinstance(color, (list, tuple)) and len(color) >= 3:
+                result["color_r"] = float(color[0])
+                result["color_g"] = float(color[1])
+                result["color_b"] = float(color[2])
+
+        # Height for antenna placement
+        if "target_height_m" in data and data["target_height_m"] is not None:
+            result["target_height_m"] = float(data["target_height_m"])
+
+        return result

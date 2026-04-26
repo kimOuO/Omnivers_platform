@@ -52,12 +52,32 @@
 ## gNB（基地台）
 
 **可編輯字段：**
-- `position` [x, y, z] — 基地台位置
-- `color` [r, g, b] — 顯示顏色
+- `position` [x, y, z] 或 {"x", "y", "z"} — 基地台位置
+- `color` [r, g, b] — 顯示顏色 (0-1)
 - `frequency_ghz` — 頻率 (GHz)
 - `bandwidth_mhz` — 帶寬 (MHz)
 - `power_dbm` — 發射功率 (dBm)
+- `active` — 是否激活 (bool)
 - `target_height_m` — 天線高度
+
+**禁止編輯字段：**
+- `name`
+- `gnb_uuid`
+- `gnb_created_at`, `gnb_updated_at`
+
+**範例請求：**
+```json
+{
+  "name": "gNB_1",
+  "position": [200, 50, 0],
+  "frequency_ghz": 3.5,
+  "bandwidth_mhz": 100,
+  "power_dbm": 43,
+  "active": true,
+  "color": [1.0, 0.5, 0.0],
+  "target_height_m": 50
+}
+```
 
 ## UE（使用者設備）
 
