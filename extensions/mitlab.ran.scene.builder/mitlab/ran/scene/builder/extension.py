@@ -56,23 +56,40 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print("[mitlab.ran.scene.builder] Extension shutdown")
 
     def _load_config(self):
-        # Priority: runtime_config file (from API POST /scene/config) > env var RAN_SCENE_CONFIG > legacy files
+        # Priority: Dynamic API (DB-driven) > runtime_config file > env var > legacy files
+        # 1. Try dynamic API first (always fetch fresh from DB)
+        backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+        try:
+            import urllib.request
+            import json as json_lib
+            api_url = f"{backend_url}/api/v0.1/RAN/Scene/LayoutReader/read"
+            print(f"[RAN] Loading config from API: {api_url}")
+            with urllib.request.urlopen(api_url, timeout=5) as response:
+                data = json_lib.loads(response.read().decode())
+                if data.get("success"):
+                    config = data.get("data", {})
+                    print(f"[RAN] Config loaded from API: {len(config.get('buildings', []))} buildings")
+                    return config
+        except Exception as e:
+            print(f"[RAN] API load failed (non-blocking): {e}")
+
+        # 2. Fallback to static files
         candidates = []
 
-        # 1. Home runtime config (from API)
+        # Home runtime config (from API POST /scene/config)
         home_runtime = os.path.expanduser("~/.omniverse_runtime_config.json")
         candidates.append(("home runtime", home_runtime))
 
-        # 2. /tmp runtime config (fallback if home write fails)
+        # /tmp runtime config (fallback if home write fails)
         tmp_runtime = "/tmp/.omniverse_runtime_config.json"
         candidates.append(("/tmp runtime", tmp_runtime))
 
-        # 3. RAN_SCENE_CONFIG env var
+        # RAN_SCENE_CONFIG env var
         env_path = os.environ.get("RAN_SCENE_CONFIG")
         if env_path:
             candidates.append(("env RAN_SCENE_CONFIG", os.path.expanduser(env_path)))
 
-        # 4. Legacy paths
+        # Legacy paths
         candidates.append(("legacy ~/omniverse", os.path.expanduser("~/omniverse/scene_config.json")))
         candidates.append(("legacy old static", os.path.expanduser("~/XAPP_DT/Omnivers_platform/scene_config.json")))
 
