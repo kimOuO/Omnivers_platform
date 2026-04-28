@@ -59,19 +59,23 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         # Priority: Dynamic API (DB-driven) > runtime_config file > env var > legacy files
         # 1. Try dynamic API first (always fetch fresh from DB)
         backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+        print(f"[RAN] Attempting to load config from API: {backend_url}")
         try:
             import urllib.request
             import json as json_lib
             api_url = f"{backend_url}/api/v0.1/RAN/Scene/SceneLayoutReader/read"
-            print(f"[RAN] Loading config from API: {api_url}")
-            with urllib.request.urlopen(api_url, timeout=5) as response:
+            print(f"[RAN] API URL: {api_url}")
+            req = urllib.request.Request(api_url, method="POST")
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, data=b'{}', timeout=5) as response:
                 data = json_lib.loads(response.read().decode())
+                print(f"[RAN] API response success: {data.get('success')}")
                 if data.get("success"):
                     config = data.get("data", {})
-                    print(f"[RAN] Config loaded from API: {len(config.get('buildings', []))} buildings")
+                    print(f"[RAN] ✓ Config loaded from API: {len(config.get('buildings', []))} buildings, target_height for '1': {[b.get('target_height_m') for b in config.get('buildings', []) if b.get('name') == '1']}")
                     return config
         except Exception as e:
-            print(f"[RAN] API load failed (non-blocking): {e}")
+            print(f"[RAN] ✗ API load failed: {e}")
 
         # 2. Fallback to static files
         candidates = []
