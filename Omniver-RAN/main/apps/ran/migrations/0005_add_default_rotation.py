@@ -2,12 +2,12 @@ from django.db import migrations, models
 
 
 def seed_default_rotations(apps, schema_editor):
-    """Set default_rotation for building presets (USD buildings need -90 on X axis)."""
+    """Set default_rotation for building presets (Brownstone: Z-axis -90 for correct orientation)."""
     UsdAsset = apps.get_model('ran', 'UsdAsset')
     UsdAsset.objects.filter(
         object_type='building',
         preset_id__in=['brownstone01', 'brownstone02', 'factory', 'cube'],
-    ).update(default_rotation=[-90, 0, 0])
+    ).update(default_rotation=[0, 0, -90])
 
 
 def reverse_seed(apps, schema_editor):
