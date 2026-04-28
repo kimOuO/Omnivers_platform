@@ -73,7 +73,7 @@ class SimSessionController:
                     "created_at": session.created_at.isoformat(),
                 },
                 message="Session created",
-                http_status=201,
+                status=201,
             )
         except Exception as e:
             log.exception("Failed to create session")

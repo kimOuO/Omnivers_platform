@@ -8,6 +8,26 @@ import os
 import math
 import re
 import time
+import sys
+from pathlib import Path
+
+# Import shared config locations (synchronized with API Extension)
+try:
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mitlab.ran.api"))
+    from config_locations import get_config_candidates
+except ImportError:
+    # Fallback if import fails
+    def get_config_candidates():
+        candidates = []
+        candidates.append(("API runtime (home)", os.path.expanduser("~/.omniverse_runtime_config.json")))
+        candidates.append(("API runtime (/tmp)", "/tmp/.omniverse_runtime_config.json"))
+        env_path = os.environ.get("RAN_SCENE_CONFIG")
+        if env_path:
+            candidates.append(("env RAN_SCENE_CONFIG", os.path.expanduser(env_path)))
+        candidates.append(("Docker container", "/app/scene_config.json"))
+        candidates.append(("Project directory", os.path.expanduser("~/XAPP_DT/Omnivers_platform/scene_config.json")))
+        candidates.append(("Legacy omniverse", os.path.expanduser("~/omniverse/scene_config.json")))
+        return candidates
 
 
 def _to_prim_name(name: str) -> str:
@@ -56,51 +76,44 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print("[mitlab.ran.scene.builder] Extension shutdown")
 
     def _load_config(self):
-        # Priority: API runtime_config > env var RAN_SCENE_CONFIG > legacy files
-        #
-        # API extension sends POST /scene/config with DB-driven config and saves to:
-        # ~/.omniverse_runtime_config.json (primary) or /tmp/.omniverse_runtime_config.json (fallback)
+        """Load scene configuration from runtime or static files.
 
-        candidates = []
-
-        # 1. Home runtime config (from API POST /scene/config) — MOST RECENT, highest priority
-        home_runtime = os.path.expanduser("~/.omniverse_runtime_config.json")
-        candidates.append(("API runtime (home)", home_runtime))
-
-        # 2. /tmp runtime config (fallback if home write fails)
-        tmp_runtime = "/tmp/.omniverse_runtime_config.json"
-        candidates.append(("API runtime (/tmp)", tmp_runtime))
-
-        # 3. RAN_SCENE_CONFIG env var
-        env_path = os.environ.get("RAN_SCENE_CONFIG")
-        if env_path:
-            candidates.append(("env RAN_SCENE_CONFIG", os.path.expanduser(env_path)))
-
-        # 4. Static scene_config.json (fallback only if API hasn't sent config yet)
-        candidates.append(("static /app", "/app/scene_config.json"))
-        candidates.append(("static host", os.path.expanduser("~/XAPP_DT/Omnivers_platform/scene_config.json")))
-        candidates.append(("legacy ~/omniverse", os.path.expanduser("~/omniverse/scene_config.json")))
+        Uses shared config locations (synchronized with API Extension) to ensure
+        both writing and reading use the same priority order.
+        """
+        # Get candidates from shared module (same list used by API Extension)
+        candidates = get_config_candidates()
 
         # Try each candidate in order
-        for name, path in candidates:
-            if os.path.exists(path):
-                print(f"[RAN] Loading config from {name}: {path}")
-                try:
-                    with open(path, "r") as f:
-                        config = json.load(f)
-                        # Log building info for debugging
-                        buildings = config.get("buildings", [])
-                        if buildings:
-                            b1 = next((b for b in buildings if b.get("name") == "1"), None)
-                            if b1:
-                                print(f"[RAN]   Building_1 target_height_m = {b1.get('target_height_m')}")
-                        return config
-                except Exception as e:
-                    print(f"[RAN] Failed to load from {name}: {e}")
-                    continue
+        for label, path in candidates:
+            if not path or not os.path.exists(path):
+                continue
 
-        # No config found - return empty scene
-        print("[RAN] No scene config found at any candidate paths")
+            print(f"[RAN] 📂 Loading config from {label}: {path}")
+            try:
+                with open(path, "r") as f:
+                    config = json.load(f)
+                    # Log summary for debugging
+                    buildings = config.get("buildings", [])
+                    gnbs = config.get("gnbs", [])
+                    ues = config.get("ues", [])
+                    print(f"[RAN] ✅ Loaded: {len(buildings)} buildings, {len(gnbs)} gNBs, {len(ues)} UEs")
+
+                    # Log building_1 details if present
+                    if buildings:
+                        b1 = next((b for b in buildings if b.get("name") == "1"), None)
+                        if b1:
+                            print(f"[RAN]    Building_1 target_height_m = {b1.get('target_height_m')}")
+                    return config
+            except Exception as e:
+                print(f"[RAN] ❌ Failed to load from {label}: {e}")
+                continue
+
+        # No config found
+        print("[RAN] ⚠️  No scene config found at any candidate paths:")
+        for label, path in candidates:
+            if path:
+                print(f"[RAN]      - {label}: {path}")
         raise RuntimeError("No scene config file found")
 
     def _as_abs_path(self, path_value):
@@ -863,10 +876,11 @@ class RANSceneBuilderExtension(omni.ext.IExt):
     def _build_building(self, stage, config):
         name = config["name"]
         pos = config["position"]
-        size = config["size"]
         color = config.get("color", [0.75, 0.75, 0.75])  # Default gray if not specified
 
         building_usd = config.get("usd")
+        # Size is only used for procedural cube; USD buildings don't need it
+        size = config.get("size", [1, 1, 1])
 
         container_path = f"/World/{_to_prim_name(name)}"
 
@@ -886,16 +900,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             asset_path = f"{container_path}/Asset"
             asset_prim = self._add_reference(stage, asset_path, building_usd)
             if asset_prim is not None and asset_prim.IsValid():
-                rot = config.get("rotation_xyz_deg")
-                if rot is not None and len(rot) == 3:
-                    self._set_xform(
-                        asset_prim,
-                        rotate_xyz_deg=(float(rot[0]), float(rot[1]), float(rot[2])),
-                    )
-
-                # Optional scale controls:
-                # - `scale`: explicit XYZ scale
-                # - `target_height_m`: auto-scale to a desired height
+                # Apply scale BEFORE rotation to ensure target_height_m is calculated on unrotated geometry
                 scale = config.get("scale")
                 if scale and len(scale) == 3:
                     self._set_xform(
@@ -906,6 +911,14 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                     target_h = config.get("target_height_m")
                     if target_h is not None:
                         self._scale_prim_to_target_height(stage, asset_prim, target_height_m=float(target_h))
+
+                # Apply rotation AFTER scaling so height calculation is correct
+                rot = config.get("rotation_xyz_deg")
+                if rot is not None and len(rot) == 3:
+                    self._set_xform(
+                        asset_prim,
+                        rotate_xyz_deg=(float(rot[0]), float(rot[1]), float(rot[2])),
+                    )
 
             # Best-effort: align referenced asset to ground (move container).
             if container_prim.IsValid():

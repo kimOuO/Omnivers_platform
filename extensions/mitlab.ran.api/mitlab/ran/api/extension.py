@@ -23,6 +23,7 @@ import omni.usd
 from pxr import UsdGeom
 
 from . import ws_server
+from .config_locations import get_config_candidates
 
 API_PORT = 8080
 
@@ -275,35 +276,40 @@ class RANAPIHandler(BaseHTTPRequestHandler):
             if parts == ["scene", "config"]:
                 body = self._read_body()
                 ext._runtime_config = body
-                import os, sys
+                import os
 
-                # Try multiple locations in priority order
-                locations = [
-                    os.path.expanduser("~/.omniverse_runtime_config.json"),  # Home
-                    "/tmp/.omniverse_runtime_config.json",  # /tmp fallback
-                    os.path.expanduser("~/omniverse/scene_config.json"),  # Alt legacy
-                    "/home/mitlab/XAPP_DT/Omnivers_platform/scene_config.json",  # Direct path
-                ]
+                # Use shared config locations (synchronized with Scene Builder)
+                candidates = get_config_candidates()
 
                 config_file = None
-                for path in locations:
+                config_label = None
+                for label, path in candidates:
+                    if not path:
+                        continue
                     try:
                         # Ensure directory exists
                         os.makedirs(os.path.dirname(path), exist_ok=True)
                         with open(path, "w") as f:
                             json.dump(body, f)
                         config_file = path
-                        print(f"[RAN API] Config saved to {path} ({len(body.get('buildings', []))} buildings)")
+                        config_label = label
+                        print(f"[RAN API] ✅ Config saved to {label}: {path}")
+                        print(f"[RAN API]    ({len(body.get('buildings', []))} buildings, "
+                              f"{len(body.get('gnbs', []))} gNBs, {len(body.get('ues', []))} UEs)")
                         break
                     except Exception as e:
-                        print(f"[RAN API] Failed to write to {path}: {e}")
+                        print(f"[RAN API] ❌ Failed to write to {label} ({path}): {e}")
                         continue
 
                 if not config_file:
-                    print("[RAN API] WARNING: Failed to save config to any location!")
+                    print("[RAN API] ⚠️  WARNING: Failed to save config to any location!")
+                    print("[RAN API]    Tried these locations:")
+                    for label, path in candidates:
+                        if path:
+                            print(f"[RAN API]      - {label}: {path}")
                     self._send_json({"status": "warning", "message": "Could not save config"}, 500)
                 else:
-                    self._send_json({"status": "saved", "path": config_file})
+                    self._send_json({"status": "saved", "path": config_file, "label": config_label})
                 return
             if parts == ["animation", "start"]:
                 ext._enqueue("start_animation"); self._send_json({"status": "queued"}); return

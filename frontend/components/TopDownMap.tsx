@@ -3,12 +3,12 @@
 import { useRef, useState, type MouseEvent as RMouseEvent } from 'react';
 import type { Building, GNB, UE, Waypoint3D } from '@/types';
 
-// Scene coordinate bounds (meters). Chosen to cover the default 250m scene
-// with some padding. Y-axis is up (ignored in this top-down view).
-const SCENE_MIN_X = -130;
-const SCENE_MAX_X = 130;
-const SCENE_MIN_Z = -130;
-const SCENE_MAX_Z = 130;
+// Scene coordinate bounds (meters). Omniverse ground is 1000×1000 (0 to 1000).
+// Y-axis is up (ignored in this top-down view).
+const SCENE_MIN_X = 0;
+const SCENE_MAX_X = 1000;
+const SCENE_MIN_Z = 0;
+const SCENE_MAX_Z = 1000;
 
 const GNB_COLORS: Record<string, string> = {
   gNB_Macro_NW: '#e94560',
@@ -109,8 +109,8 @@ export function TopDownMap({
           Waypoint handles are rendered AFTER this group and intentionally keep
           pointer events (for drag / right-click delete). */}
       <g style={{ pointerEvents: 'none' }}>
-        {/* Grid lines every 50 m */}
-        {[-100, -50, 0, 50, 100].map((v) => (
+        {/* Grid lines every 100 m (1000m scene) */}
+        {[0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((v) => (
           <g key={`grid-${v}`}>
             <line x1={scaleX(v)} y1={0} x2={scaleX(v)} y2={height} stroke="#1f1f3a" strokeWidth={1} />
             <line x1={0} y1={scaleZ(v)} x2={width} y2={scaleZ(v)} stroke="#1f1f3a" strokeWidth={1} />
