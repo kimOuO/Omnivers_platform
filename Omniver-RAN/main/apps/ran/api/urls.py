@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from django.urls import path
 
+from main.apps.ran.actors.asset_actor import UsdAssetController, UsdAssetReader
 from main.apps.ran.actors.building_actor import BuildingController
 from main.apps.ran.actors.gnb_actor import GNBController, GNBReader
 from main.apps.ran.actors.history_actor import PositionHistoryReader, SignalHistoryReader
@@ -44,11 +45,16 @@ urlpatterns = [
 
     # ---- RAN/UE ----
     path("RAN/UE/UEReader/read", UEReader.read, name="ue_read"),
+    path("RAN/UE/UEController/create", UEController.create, name="ue_create"),
+    path("RAN/UE/UEController/update", UEController.update, name="ue_update"),
+    path("RAN/UE/UEController/delete", UEController.delete, name="ue_delete"),
     path("RAN/UE/UEController/move", UEController.move, name="ue_move"),
     path("RAN/UE/UEController/trajectory", UEController.trajectory, name="ue_trajectory"),
 
     # ---- RAN/GNB ----
     path("RAN/GNB/GNBReader/read", GNBReader.read, name="gnb_read"),
+    path("RAN/GNB/GNBController/create", GNBController.create, name="gnb_create"),
+    path("RAN/GNB/GNBController/delete", GNBController.delete, name="gnb_delete"),
     path("RAN/GNB/GNBController/update", GNBController.update, name="gnb_update"),
 
     # ---- RAN/Ingest ----
@@ -69,4 +75,10 @@ urlpatterns = [
     # ---- RAN/SimSession/Playback ----
     path("RAN/SimSession/PlaybackController/list", PlaybackController.list, name="playback_list"),
     path("RAN/SimSession/PlaybackController/read", PlaybackController.read, name="playback_read"),
+
+    # ---- RAN/Assets ----
+    path("RAN/Assets/UsdAssetReader/list", UsdAssetReader.list, name="asset_list"),
+    path("RAN/Assets/UsdAssetController/create", UsdAssetController.create, name="asset_create"),
+    path("RAN/Assets/UsdAssetController/update", UsdAssetController.update, name="asset_update"),
+    path("RAN/Assets/UsdAssetController/delete", UsdAssetController.delete, name="asset_delete"),
 ]

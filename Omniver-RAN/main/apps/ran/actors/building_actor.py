@@ -22,17 +22,20 @@ log = get_logger(__name__)
 def _rebuild_kit_scene() -> None:
     """Generate config from DB and push to Kit."""
     try:
+        log.info("_rebuild_kit_scene: starting config generation")
         config = SceneConfigGeneratorService.generate()
+        log.info(f"_rebuild_kit_scene: generated config with {len(config.get('buildings', []))} buildings")
         KitBusinessService.push_scene_config(config)
+        log.info("_rebuild_kit_scene: pushed config to Kit")
         KitBusinessService.build_scene()
+        log.info("_rebuild_kit_scene: triggered build_scene")
     except Exception as e:  # noqa: BLE001
-        log.error("Failed to rebuild Kit scene: %s", e)
+        log.error("_rebuild_kit_scene failed: %s", e)
 
 
 class BuildingController:
     @staticmethod
     @actor
-    @transaction.atomic
     def create(request):
         data, err = parse_body(request)
         if err is not None:
@@ -56,7 +59,7 @@ class BuildingController:
         building = SqlDbBusinessService.create_entity(BuildingObject, entity_data)
         output = BuildingReadSerializer.to_representation(building)
 
-        transaction.on_commit(lambda: _rebuild_kit_scene())
+        _rebuild_kit_scene()
 
         return success_response(output, "Building created", 201)
 
@@ -72,7 +75,6 @@ class BuildingController:
 
     @staticmethod
     @actor
-    @transaction.atomic
     def update(request):
         data, err = parse_body(request)
         if err is not None:
@@ -97,13 +99,12 @@ class BuildingController:
         updated = SqlDbBusinessService.update_entity(building, v)
         output = BuildingReadSerializer.to_representation(updated)
 
-        transaction.on_commit(lambda: _rebuild_kit_scene())
+        _rebuild_kit_scene()
 
         return success_response(output, "Building updated", 200)
 
     @staticmethod
     @actor
-    @transaction.atomic
     def delete(request):
         data, err = parse_body(request)
         if err is not None:
@@ -117,8 +118,9 @@ class BuildingController:
         if building is None:
             return error_response(f"Building '{name}' not found", status=404)
 
-        SqlDbBusinessService.delete_entity(building)
-
-        transaction.on_commit(lambda: _rebuild_kit_scene())
-
-        return success_response(None, "Building deleted", 204)
+        try:
+            SqlDbBusinessService.delete_entity(building)
+            return success_response({"name": name}, "Building deleted", 204)
+        except Exception as e:  # noqa: BLE001
+            log.error("BuildingController.delete failed: %s", e)
+            return error_response("Delete failed", {"detail": str(e)}, 500)

@@ -6,7 +6,23 @@ from pxr import Usd, UsdGeom, Gf, Sdf, Vt
 import json
 import os
 import math
+import re
 import time
+
+
+def _to_prim_name(name: str) -> str:
+    """Sanitize a string to a valid USD prim identifier (must start with letter/underscore)."""
+    sanitized = re.sub(r'[^A-Za-z0-9_]', '_', str(name))
+    if sanitized and sanitized[0].isdigit():
+        sanitized = f'_{sanitized}'
+    return sanitized or '_unnamed'
+
+
+# Default ground configuration — used in all scenes
+DEFAULT_GROUND_CONFIG = {
+    "material": "grass",
+    "size": [1000, 1000]
+}
 
 
 class RANSceneBuilderExtension(omni.ext.IExt):
@@ -40,21 +56,40 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print("[mitlab.ran.scene.builder] Extension shutdown")
 
     def _load_config(self):
-        # Priority: runtime_config file (from API POST /scene/config) > env var RAN_SCENE_CONFIG > legacy file
-        runtime_config_file = os.path.expanduser("~/.omniverse_runtime_config.json")
-        if os.path.exists(runtime_config_file):
-            print("[RAN] Loading config from runtime file (API)")
-            with open(runtime_config_file, "r") as f:
-                return json.load(f)
+        # Priority: runtime_config file (from API POST /scene/config) > env var RAN_SCENE_CONFIG > legacy files
+        candidates = []
 
+        # 1. Home runtime config (from API)
+        home_runtime = os.path.expanduser("~/.omniverse_runtime_config.json")
+        candidates.append(("home runtime", home_runtime))
+
+        # 2. /tmp runtime config (fallback if home write fails)
+        tmp_runtime = "/tmp/.omniverse_runtime_config.json"
+        candidates.append(("/tmp runtime", tmp_runtime))
+
+        # 3. RAN_SCENE_CONFIG env var
         env_path = os.environ.get("RAN_SCENE_CONFIG")
         if env_path:
-            config_path = os.path.expanduser(env_path)
-        else:
-            config_path = os.path.expanduser("~/omniverse/scene_config.json")
-        print(f"[RAN] Loading config from: {config_path}")
-        with open(config_path, "r") as f:
-            return json.load(f)
+            candidates.append(("env RAN_SCENE_CONFIG", os.path.expanduser(env_path)))
+
+        # 4. Legacy paths
+        candidates.append(("legacy ~/omniverse", os.path.expanduser("~/omniverse/scene_config.json")))
+        candidates.append(("legacy old static", os.path.expanduser("~/XAPP_DT/Omnivers_platform/scene_config.json")))
+
+        # Try each candidate in order
+        for name, path in candidates:
+            if os.path.exists(path):
+                print(f"[RAN] Loading config from {name}: {path}")
+                try:
+                    with open(path, "r") as f:
+                        return json.load(f)
+                except Exception as e:
+                    print(f"[RAN] Failed to load from {name}: {e}")
+                    continue
+
+        # No config found - return empty scene
+        print("[RAN] No scene config found at any candidate paths")
+        raise RuntimeError("No scene config file found")
 
     def _as_abs_path(self, path_value):
         if not path_value:
@@ -206,15 +241,33 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         except TypeError:
             # Some builds accept (time, purposes, useExtentsHint, ignoreVisibility)
             bbox_cache = UsdGeom.BBoxCache(time_code, included_purposes, True, False)
-        return bbox_cache.ComputeWorldBound(prim)
+        bound = bbox_cache.ComputeWorldBound(prim)
+
+        # Fallback: if extentsHint returns empty bounds (geometry not loaded/composed yet),
+        # recompute from actual geometry with useExtentsHint=False
+        size = bound.ComputeAlignedRange().GetSize()
+        if max(float(size[0]), float(size[1]), float(size[2])) <= 1e-6:
+            try:
+                bbox_cache2 = UsdGeom.BBoxCache(time_code, included_purposes, False)
+            except TypeError:
+                bbox_cache2 = UsdGeom.BBoxCache(time_code, included_purposes, False, False)
+            return bbox_cache2.ComputeWorldBound(prim)
+        return bound
 
     def _scale_prim_to_target_height(self, stage, prim, target_height_m):
         try:
             world_bound = self._compute_world_bbox(stage, prim)
             bbox = world_bound.ComputeAlignedRange()
             current_height = float(bbox.GetSize()[1])
+
+            # If Y-axis is zero (after rotation or geometry not fully loaded), use largest dimension
             if current_height <= 1e-6:
-                return
+                sizes = [float(bbox.GetSize()[i]) for i in range(3)]
+                current_height = max(sizes)
+                if current_height <= 1e-6:
+                    print(f"[RAN] Auto-scale SKIPPED '{prim.GetPath()}': bbox is zero (geometry not loaded?)")
+                    return
+                print(f"[RAN] Auto-scale '{prim.GetPath()}': Y-dim=0, using max-dim={current_height:.3f}")
 
             meters_per_unit = float(UsdGeom.GetStageMetersPerUnit(stage) or 1.0)
             target_height_units = float(target_height_m) / meters_per_unit
@@ -302,6 +355,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print("[RAN] _build_scene() called")
         self._stop_animation()
         self._animated_ues = []
+        self._clear_scene()
         self._status.text = "Building..."
         try:
             config = self._load_config()
@@ -349,7 +403,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
             # If we use an environment template, skip our procedural ground to avoid overlap.
             if (not env_usd) and (not render_only_gnb):
-                self._build_ground(stage, config["ground"])
+                self._build_ground(stage, DEFAULT_GROUND_CONFIG)
 
             if (not render_only_gnb) and (not skip_buildings):
                 for b in config["buildings"]:
@@ -584,17 +638,21 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         if not prim.IsValid():
             print(f"[RAN] move_ue: UE '{name}' not found")
             return
-        xformable = UsdGeom.Xformable(prim)
-        for op in xformable.GetOrderedXformOps():
-            if op.GetOpName() == "xformOp:translate":
-                old = op.Get()
-                if y is None and old is not None:
-                    yv = float(old[1])
-                else:
-                    yv = float(y or 0.0)
-                op.Set(type(old)(float(x), yv, float(z)))
-                return
-        print(f"[RAN] move_ue: '{name}' has no xformOp:translate")
+
+        # Get current Y if not specified
+        yv = float(y or 0.0)
+        if y is None:
+            xformable = UsdGeom.Xformable(prim)
+            for op in xformable.GetOrderedXformOps():
+                if op.GetOpName() == "xformOp:translate":
+                    old = op.Get()
+                    if old is not None:
+                        yv = float(old[1])
+                    break
+
+        # Use _set_xform to handle xformOp creation or update
+        self._set_xform(prim, translate=(float(x), yv, float(z)))
+        print(f"[RAN] move_ue: '{name}' → ({float(x):.1f}, {yv:.1f}, {float(z):.1f})")
 
     def push_signal(self, name, serving_cell=None, rsrp_dbm=None,
                     sinr_db=None, rsrp_map=None):
@@ -798,7 +856,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
         building_usd = config.get("usd")
 
-        container_path = f"/World/{name}"
+        container_path = f"/World/{_to_prim_name(name)}"
 
         # If configured, use an external building USD reference.
         if building_usd:
@@ -874,9 +932,9 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         if target_h is not None:
             height = float(target_h)
         else:
-            height = float(pos[1]) * gnb_scale
+            height = float(pos[1]) * gnb_scale * 4.0
 
-        container_path = f"/World/{name}"
+        container_path = f"/World/{_to_prim_name(name)}"
         UsdGeom.Xform.Define(stage, container_path)
 
         # Triangular pyramid tower (cone with large base)
@@ -891,7 +949,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             # USD Cone default axis is Z, rotate so tip points up (Y)
             cone_geom.GetAxisAttr().Set(UsdGeom.Tokens.y)
             # Scale: wide base and tall (height from config), with optional visual scaling.
-            base_radius = 15.0 * gnb_scale
+            base_radius = 60.0 * gnb_scale
             self._set_xform(cone,
                 translate=(pos[0], height / 2.0, pos[2]),
                 scale=(base_radius, height, base_radius))
@@ -904,7 +962,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             prim_type="Sphere", prim_path=ant_path)
         ant = stage.GetPrimAtPath(ant_path)
         if ant.IsValid():
-            ant_radius = 6.0 * gnb_scale
+            ant_radius = 24.0 * gnb_scale
             UsdGeom.Sphere(ant).GetRadiusAttr().Set(ant_radius)
             self._set_xform(ant, translate=(pos[0], height + ant_radius, pos[2]))
             UsdGeom.Gprim(ant).CreateDisplayColorPrimvar(
@@ -914,19 +972,21 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         self._build_rru_waves(
             stage=stage,
             parent_path=container_path,
-            center=(float(pos[0]), float(height + (6.0 * gnb_scale)), float(pos[2])),
+            center=(float(pos[0]), float(height + (24.0 * gnb_scale)), float(pos[2])),
             color=(1.0, 0.9, 0.2),
             scale=gnb_scale,
         )
 
-        print(f"[RAN] gNB '{name}' at {pos}, freq={config['frequency_ghz']}GHz")
+        # Support both formats: 'frequency_ghz' (from DB) or 'freq_mhz' (from API)
+        freq_ghz = config.get('frequency_ghz') or (config.get('freq_mhz', 0) / 1000.0)
+        print(f"[RAN] gNB '{name}' at {pos}, freq={freq_ghz}GHz")
 
     def _build_ue(self, stage, config):
         name = config["name"]
         pos = config["position"]
         color = config["color"]
 
-        container_path = f"/World/{name}"
+        container_path = f"/World/{_to_prim_name(name)}"
 
         # If configured, use a real character USD as UE.
         ue_asset_cfg = (self._config or {}).get("ue_asset") or {}
@@ -956,7 +1016,10 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         body_path = f"{container_path}/Body"
         head_path = f"{container_path}/Head"
 
-        UsdGeom.Xform.Define(stage, container_path)
+        container = UsdGeom.Xform.Define(stage, container_path)
+        # Add translate op to container so move_ue can work
+        self._set_xform(container.GetPrim(), translate=(float(pos[0]), float(pos[1]), float(pos[2])))
+        print(f"[RAN] _build_ue: container xform configured for '{name}' at {pos}")
 
         body_height = 28.0
         body_radius = 5.0

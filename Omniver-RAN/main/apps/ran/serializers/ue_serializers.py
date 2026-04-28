@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from main.apps.ran.models import UeState
+from main.apps.ran.models import UeState, UeConfig
 from main.apps.ran.serializers._base import Serializer
 
 
@@ -17,6 +17,18 @@ def _as_xyz(v: Any) -> dict[str, float]:
 class UeReadSerializer(Serializer):
     @classmethod
     def to_representation(cls, instance: Any) -> dict[str, Any]:
+        # Handle UeConfig ORM object (from database)
+        if isinstance(instance, UeConfig):
+            return {
+                "name": instance.name,
+                "position": [float(instance.pos_x or 0), float(instance.pos_y or 0), float(instance.pos_z or 0)],
+                "waypoints": instance.waypoints_json,
+                "speed_mps": float(instance.speed_mps or 1.0),
+                "loop": bool(instance.loop),
+                "target_height_m": instance.target_height_m,
+            }
+
+        # Handle UeState
         if isinstance(instance, UeState):
             return {
                 "name": instance.name,
@@ -25,14 +37,70 @@ class UeReadSerializer(Serializer):
                 "rsrp_dbm": instance.rsrp_dbm,
                 "sinr_db": instance.sinr_db,
             }
-        # Raw dict coming from Kit proxy
-        name = instance.get("name") if isinstance(instance, dict) else None
+
+        # Handle dict coming from Kit proxy
+        if isinstance(instance, dict):
+            return {
+                "name": instance.get("name"),
+                "position": _as_xyz(instance.get("position")),
+                "serving_cell": instance.get("serving_cell"),
+                "rsrp_dbm": instance.get("rsrp_dbm"),
+                "sinr_db": instance.get("sinr_db"),
+            }
+
+        return {}
+
+
+class UeWriteSerializer(Serializer):
+    """Serializer for creating a new UE."""
+    def _validate_write(self, data: dict[str, Any]) -> dict[str, Any] | None:
+        name = self._require(data, "name", str)
+        if not name:
+            self._errors["name"] = "required (str)"
+            return None
+
+        pos_raw = data.get("position")
+        position = _as_xyz(pos_raw) if pos_raw is not None else _as_xyz([0, 0, 0])
+
+        speed_mps = self._optional(data, "speed_mps", (int, float))
+        waypoints = data.get("waypoints", [])
+        loop = data.get("loop", True)
+        target_height_m = self._optional(data, "target_height_m", (int, float), None)
+
+        # Handle preset_id → lookup usd_path + defaults
+        preset_id = self._optional(data, "preset_id", str, None)
+        if preset_id:
+            from main.apps.ran.models import UsdAsset
+            try:
+                asset = UsdAsset.objects.get(preset_id=preset_id, object_type="ue", active=True)
+                usd_path = asset.usd_path
+                preset_type = preset_id
+            except UsdAsset.DoesNotExist:
+                self._add_error("preset_id", "Unknown preset_id")
+                return {}
+        else:
+            usd_path = self._optional(data, "usd_path", str, "")
+            preset_type = ""
+
+        # Default target_height_m based on preset if not provided
+        if target_height_m is None:
+            PRESET_TARGET_HEIGHTS = {
+                "female_office": 50.0,
+                "male_party": 34.0,
+            }
+            target_height_m = PRESET_TARGET_HEIGHTS.get(preset_id)
+
         return {
             "name": name,
-            "position": _as_xyz(instance.get("position") if isinstance(instance, dict) else None),
-            "serving_cell": instance.get("serving_cell") if isinstance(instance, dict) else None,
-            "rsrp_dbm": instance.get("rsrp_dbm") if isinstance(instance, dict) else None,
-            "sinr_db": instance.get("sinr_db") if isinstance(instance, dict) else None,
+            "pos_x": float(position["x"]),
+            "pos_y": float(position["y"]),
+            "pos_z": float(position["z"]),
+            "speed_mps": float(speed_mps) if speed_mps else 1.0,
+            "waypoints_json": waypoints if isinstance(waypoints, list) else [],
+            "loop": bool(loop),
+            "usd_path": usd_path,
+            "preset_type": preset_type,
+            "target_height_m": float(target_height_m) if target_height_m is not None else None,
         }
 
 

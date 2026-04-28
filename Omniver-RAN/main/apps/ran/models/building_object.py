@@ -16,6 +16,7 @@ class BuildingObject(models.Model):
     color_g = models.FloatField(default=0.75)
     color_b = models.FloatField(default=0.75)
     usd_path = models.CharField(max_length=512, blank=True, default="")
+    preset_type = models.CharField(max_length=128, blank=True, default="")
     target_height_m = models.FloatField(null=True, blank=True)
     rot_x = models.FloatField(default=0)
     rot_y = models.FloatField(default=0)

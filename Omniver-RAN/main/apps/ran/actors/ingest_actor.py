@@ -77,29 +77,32 @@ class SceneIngestor:
             pos = b.get("position", [0, 0, 0])
             size = b.get("size", [10, 10, 10])
             color = b.get("color", [0.75, 0.75, 0.75])
-            rot = b.get("rotation_xyz_deg", [0, 0, 0])
+            building_defaults = {
+                "building_uuid": UUIDService.generate_uuid("building", name),
+                "scene_id": scene_id,
+                "pos_x": float(pos[0]) if len(pos) > 0 else 0,
+                "pos_y": float(pos[1]) if len(pos) > 1 else 0,
+                "pos_z": float(pos[2]) if len(pos) > 2 else 0,
+                "size_x": float(size[0]) if len(size) > 0 else 10,
+                "size_y": float(size[1]) if len(size) > 1 else 10,
+                "size_z": float(size[2]) if len(size) > 2 else 10,
+                "color_r": float(color[0]) if len(color) > 0 else 0.75,
+                "color_g": float(color[1]) if len(color) > 1 else 0.75,
+                "color_b": float(color[2]) if len(color) > 2 else 0.75,
+                "usd_path": b.get("usd_path", b.get("usd", "")),
+                "target_height_m": float(b["target_height_m"]) if b.get("target_height_m") else None,
+                "material": b.get("material", ""),
+            }
+            # Only update rotation if explicitly provided in payload — prevents ingest from resetting to [0,0,0]
+            rot = b.get("rotation_xyz_deg")
+            if rot is not None:
+                building_defaults["rot_x"] = float(rot[0]) if len(rot) > 0 else 0
+                building_defaults["rot_y"] = float(rot[1]) if len(rot) > 1 else 0
+                building_defaults["rot_z"] = float(rot[2]) if len(rot) > 2 else 0
             SqlDbBusinessService.upsert_entity(
                 BuildingObject,
                 lookup={"name": name},
-                defaults={
-                    "building_uuid": UUIDService.generate_uuid("building", name),
-                    "scene_id": scene_id,
-                    "pos_x": float(pos[0]) if len(pos) > 0 else 0,
-                    "pos_y": float(pos[1]) if len(pos) > 1 else 0,
-                    "pos_z": float(pos[2]) if len(pos) > 2 else 0,
-                    "size_x": float(size[0]) if len(size) > 0 else 10,
-                    "size_y": float(size[1]) if len(size) > 1 else 10,
-                    "size_z": float(size[2]) if len(size) > 2 else 10,
-                    "color_r": float(color[0]) if len(color) > 0 else 0.75,
-                    "color_g": float(color[1]) if len(color) > 1 else 0.75,
-                    "color_b": float(color[2]) if len(color) > 2 else 0.75,
-                    "usd_path": b.get("usd", ""),
-                    "target_height_m": float(b["target_height_m"]) if b.get("target_height_m") else None,
-                    "rot_x": float(rot[0]) if len(rot) > 0 else 0,
-                    "rot_y": float(rot[1]) if len(rot) > 1 else 0,
-                    "rot_z": float(rot[2]) if len(rot) > 2 else 0,
-                    "material": b.get("material", ""),
-                },
+                defaults=building_defaults,
             )
 
         # Upsert ObstacleObject for each obstacle

@@ -99,7 +99,7 @@ sys.argv = ['kit', '/app/kit/ran_server.kit',
             '--/exts/omni.kit.window.content_browser/show=false',
             '--/exts/omni.kit.window.property/show=false',
             '--/exts/omni.kit.window.stage/show=false',
-            '--/exts/omni.kit.viewport.window/show=false',
+            '--/exts/omni.kit.viewport.window/show=true',
             '--/rtx-transactionlogging=0']
 runpy.run_module('omni.kit_app', run_name='__main__')
 EOFPYTHON

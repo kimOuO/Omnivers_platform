@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from django.db import transaction
-
 from main.apps.ran.actors._http import actor, parse_body
 from main.apps.ran.models import UeConfig
 from main.apps.ran.serializers.ue_serializers import (
     UeMoveWriteSerializer,
     UeReadSerializer,
     UeTrajectoryWriteSerializer,
+    UeWriteSerializer,
 )
 from main.apps.ran.services.business.kit_operations import KitBusinessService
 from main.apps.ran.services.business.sqldb_operations import SqlDbBusinessService
@@ -20,27 +19,95 @@ log = get_logger(__name__)
 
 
 class UEReader:
-    """Read current UE list from Kit and normalize."""
+    """Read UE list from database."""
 
     @staticmethod
     @actor
     def read(request):  # noqa: ARG004
         try:
-            raw = KitBusinessService.list_ues()
+            ues = SqlDbBusinessService.list_entities(UeConfig)
+            output = [UeReadSerializer.to_representation(u) for u in ues]
+            return success_response(output)
         except Exception as e:  # noqa: BLE001
-            return error_response("Kit unreachable", {"detail": str(e)}, 502)
-
-        items: list[dict] = []
-        if isinstance(raw, dict):
-            items = [{"name": name, **(payload if isinstance(payload, dict) else {})}
-                     for name, payload in raw.items()]
-        elif isinstance(raw, list):
-            items = raw
-        output = [UeReadSerializer.to_representation(x) for x in items]
-        return success_response(output)
+            return error_response("Failed to read UEs from database", {"detail": str(e)}, 500)
 
 
 class UEController:
+    @staticmethod
+    @actor
+    def create(request):
+        data, err = parse_body(request)
+        if err is not None:
+            return err
+
+        s = UeWriteSerializer(data=data)
+        if not s.is_valid():
+            return error_response("Validation failed", s.errors, 400)
+
+        v = s.validated_data
+        ue_uuid = UUIDService.generate_uuid("ue", v["name"])
+        ts = TimestampService.get_current_timestamp()
+
+        entity_data = {
+            "ue_uuid": ue_uuid,
+            "ue_created_at": ts,
+            "ue_updated_at": ts,
+            **v,
+        }
+
+        ue = SqlDbBusinessService.create_entity(UeConfig, entity_data)
+        output = UeReadSerializer.to_representation(ue)
+        return success_response(output, "UE created", 201)
+
+    @staticmethod
+    @actor
+    def delete(request):
+        data, err = parse_body(request)
+        if err is not None:
+            return err
+
+        name = data.get("name")
+        if not name or not isinstance(name, str):
+            return error_response("Validation failed", {"name": "required (str)"}, 400)
+
+        cfg = SqlDbBusinessService.find_entity(UeConfig, name=name)
+        if cfg is None:
+            return error_response(f"UE '{name}' not found", status=404)
+
+        SqlDbBusinessService.delete_entity(cfg)
+        return success_response({"name": name}, "UE deleted")
+
+    @staticmethod
+    @actor
+    def update(request):
+        data, err = parse_body(request)
+        if err is not None:
+            return err
+
+        name = data.get("name")
+        if not name or not isinstance(name, str):
+            return error_response("Validation failed", {"name": "required (str)"}, 400)
+
+        cfg = SqlDbBusinessService.find_entity(UeConfig, name=name)
+        if cfg is None:
+            return error_response(f"UE '{name}' not found", status=404)
+
+        updates: dict = {"ue_updated_at": TimestampService.get_current_timestamp()}
+        if "position" in data:
+            pos = data["position"]
+            updates["pos_x"] = float(pos[0])
+            updates["pos_y"] = float(pos[1])
+            updates["pos_z"] = float(pos[2])
+        if "speed_mps" in data:
+            updates["speed_mps"] = float(data["speed_mps"])
+        if "waypoints" in data:
+            updates["waypoints_json"] = data["waypoints"]
+
+        SqlDbBusinessService.update_entity(cfg, updates)
+        cfg.refresh_from_db()
+        output = UeReadSerializer.to_representation(cfg)
+        return success_response(output, "UE updated")
+
     @staticmethod
     @actor
     def move(request):
@@ -59,7 +126,6 @@ class UEController:
 
     @staticmethod
     @actor
-    @transaction.atomic
     def trajectory(request):
         data, err = parse_body(request)
         if err is not None:
@@ -69,7 +135,6 @@ class UEController:
             return error_response("Validation failed", s.errors, 400)
         v = s.validated_data
 
-        # Persist the trajectory intent (upsert into ue_config)
         timestamp = TimestampService.get_current_timestamp()
         ue_uuid = UUIDService.generate_uuid("ue", v["name"])
         SqlDbBusinessService.upsert_entity(
@@ -84,7 +149,6 @@ class UEController:
             },
         )
 
-        # Push to Kit so the viewport follows immediately
         try:
             KitBusinessService.set_trajectory(v["name"], v["waypoints"], v["speed_mps"], v["loop"])
         except Exception as e:  # noqa: BLE001

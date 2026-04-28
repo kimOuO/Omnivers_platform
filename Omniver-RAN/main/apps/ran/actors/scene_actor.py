@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from main.apps.ran.actors._http import actor, parse_body
 from main.apps.ran.serializers.scene_serializers import (
-    SceneLayoutReadSerializer,
     SceneOverviewReadSerializer,
 )
 from main.apps.ran.services.business.kit_operations import KitBusinessService
+from main.apps.ran.services.optional.scene_config_generator import SceneConfigGeneratorService
 from main.utils.logger import get_logger
 from main.utils.response import error_response, success_response
 
@@ -35,11 +35,14 @@ class SceneLayoutReader:
     @actor
     def read(request):  # noqa: ARG004
         try:
-            raw = KitBusinessService.get_scene_layout()
+            config = SceneConfigGeneratorService.generate()
+            for gnb in config.get("gnbs", []):
+                gnb["freq_mhz"] = gnb.pop("frequency_ghz", 0) * 1000
+                gnb["bw_hz"] = gnb.pop("bandwidth_mhz", 0) * 1_000_000
         except Exception as e:  # noqa: BLE001
-            log.error("SceneLayoutReader.read Kit unreachable: %s", e)
-            return error_response("Kit unreachable", {"detail": str(e)}, 502)
-        return success_response(SceneLayoutReadSerializer.to_representation(raw))
+            log.error("SceneLayoutReader.read DB error: %s", e)
+            return error_response("DB read failed", {"detail": str(e)}, 500)
+        return success_response(config)
 
 
 class SceneController:
@@ -49,6 +52,8 @@ class SceneController:
     @actor
     def build(request):  # noqa: ARG004
         try:
+            config = SceneConfigGeneratorService.generate()
+            KitBusinessService.push_scene_config(config)
             KitBusinessService.build_scene()
         except Exception as e:  # noqa: BLE001
             return error_response("Kit unreachable", {"detail": str(e)}, 502)

@@ -17,6 +17,7 @@ class ObstacleObject(models.Model):
     color_b = models.FloatField(default=0.75)
     material = models.CharField(max_length=128, blank=True, default="")
     usd_path = models.CharField(max_length=512, blank=True, default="")
+    preset_type = models.CharField(max_length=128, blank=True, default="")
     scale_x = models.FloatField(default=1.0)
     scale_y = models.FloatField(default=1.0)
     scale_z = models.FloatField(default=1.0)

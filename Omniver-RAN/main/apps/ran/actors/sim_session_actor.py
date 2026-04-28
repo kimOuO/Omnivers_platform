@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from main.apps.ran.actors._http import actor, parse_body
-from main.apps.ran.models import SimulationSession
+from main.apps.ran.models import SimulationSession, SignalHistory, PositionHistory
 from main.utils.logger import get_logger
 from main.utils.response import error_response, success_response
 
@@ -23,7 +23,8 @@ class SimSessionController:
         Body:
             {
                 "session_uuid": str,
-                "scene_id": str
+                "scene_id": str,
+                "scene_snapshot": dict (optional)
             }
 
         Returns:
@@ -35,6 +36,7 @@ class SimSessionController:
 
         session_uuid = data.get("session_uuid")
         scene_id = data.get("scene_id")
+        scene_snapshot = data.get("scene_snapshot", {})
 
         if not session_uuid or not scene_id:
             return error_response("Missing session_uuid or scene_id", {}, 400)
@@ -42,12 +44,27 @@ class SimSessionController:
         log.info("SimSessionController.create session_uuid=%s scene_id=%s", session_uuid, scene_id)
 
         try:
+            metadata_json = {"created_by": "ran_sim"}
+            if scene_snapshot:
+                metadata_json["scene_snapshot"] = scene_snapshot
+
             session = SimulationSession.objects.create(
                 session_uuid=session_uuid,
                 scene_id=scene_id,
                 status="running",
-                metadata_json={"created_by": "ran_sim"},
+                metadata_json=metadata_json,
             )
+
+            # 清理舊 session：保留最近 10 筆
+            sessions = SimulationSession.objects.order_by("created_at")
+            if sessions.count() > 10:
+                oldest = sessions.first()
+                log.info("Deleting oldest session %s to keep max 10", oldest.session_uuid)
+                # 級聯刪除關聯的 SignalHistory 和 PositionHistory
+                SignalHistory.objects.filter(session_uuid=oldest.session_uuid).delete()
+                PositionHistory.objects.filter(session_uuid=oldest.session_uuid).delete()
+                oldest.delete()
+
             return success_response(
                 {
                     "session_uuid": session.session_uuid,

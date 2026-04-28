@@ -22,7 +22,7 @@ from pxr import Gf, Tf, Usd, UsdGeom
 
 # --- Config -----------------------------------------------------------------
 
-UE_OFFSET_Y = 6.0
+UE_OFFSET_Y = 75.0
 GNB_OFFSET_Y = 8.0
 UPDATE_HZ = 120.0  # ceiling — actual work is gated by _data_dirty / camera_moved
 
@@ -38,7 +38,7 @@ BG_LIGHT = 0xC0FFFFFF  # semi-transparent white (gNB: black text)
 
 def _rsrp_color(v):
     if v is None:
-        return WHITE
+        return BLACK
     if v > -80:
         return GOOD
     if v > -100:
@@ -62,10 +62,14 @@ def _gnb_fp(freq, power):
 
 def _get_gnb_cfg():
     try:
-        from mitlab.ran.scene.builder.extension import RANSceneBuilderExtension
+        from mitlab.ran.scene.builder.extension import RANSceneBuilderExtension, _to_prim_name
         b = RANSceneBuilderExtension._instance
         if b and b._config:
-            return {g["name"]: g for g in (b._config.get("gnbs") or [])}
+            result = {}
+            for g in (b._config.get("gnbs") or []):
+                result[g["name"]] = g
+                result[_to_prim_name(g["name"])] = g
+            return result
     except Exception:  # noqa: BLE001
         pass
     return {}
@@ -442,10 +446,24 @@ class RANLabelsExtension(omni.ext.IExt):
 
         for child in world.GetChildren():
             name = child.GetName()
-            is_ue = name.startswith("UE")
-            is_gnb = name.startswith("gNB")
-            if not (is_ue or is_gnb):
+            # Skip special prims
+            if name in ("Ground", "Environment", "SunLight"):
                 continue
+
+            child_names = {c.GetName() for c in child.GetChildren()}
+
+            # Determine type: gNB has Tower
+            if "Tower" in child_names:
+                is_ue = False
+            # UE: has ran:rsrp_dbm or Body/Head children
+            elif child.HasAttribute("ran:rsrp_dbm") or "Body" in child_names:
+                is_ue = True
+            # UE fallback: if it has children and is not a building (no 'Asset' child)
+            elif len(child_names) > 0 and "Asset" not in child_names:
+                is_ue = True
+            else:
+                continue
+
             seen.add(name)
             self._update_one(child, name, is_ue, gnb_cfg, mvp, width, height)
 
@@ -503,25 +521,25 @@ class RANLabelsExtension(omni.ext.IExt):
         if is_ue:
             sig = _read_signal(prim)
             rows = [
-                (name, WHITE, 16),
-                (sig["serving_cell"] or "-", WHITE, 12),
-                (_rsrp_text(sig["rsrp_dbm"]), _rsrp_color(sig["rsrp_dbm"]), 12),
-                (_sinr_text(sig["sinr_db"]), WHITE, 12),
+                (name, BLACK, 24),
+                (sig["serving_cell"] or "-", BLACK, 18),
+                (_rsrp_text(sig["rsrp_dbm"]), _rsrp_color(sig["rsrp_dbm"]), 18),
+                (_sinr_text(sig["sinr_db"]), BLACK, 18),
             ]
             key = f"{name}|{sig['serving_cell']}|{sig['rsrp_dbm']}|{sig['sinr_db']}"
         else:
             cfg = gnb_cfg.get(name, {})
-            freq = cfg.get("frequency_ghz")
+            freq = cfg.get("frequency_ghz") or (cfg.get("freq_mhz", 0) / 1000.0 if cfg.get("freq_mhz") else None)
             power = cfg.get("power_dbm")
-            bw = cfg.get("bandwidth_mhz")
+            bw = cfg.get("bandwidth_mhz") or (cfg.get("bw_hz", 0) / 1e6 if cfg.get("bw_hz") else None)
             pci = cfg.get("pci")
             cell_id = cfg.get("cell_id")
             rows = [
-                (name, BLACK, 16),
-                (_gnb_fp(freq, power), BLACK, 12),
-                (f"BW {bw:.0f}MHz" if bw is not None else "BW ?", BLACK, 12),
-                (f"PCI {pci}" if pci is not None else "PCI -", BLACK, 12),
-                (f"Cell {cell_id}" if cell_id is not None else "Cell -", BLACK, 11),
+                (name, BLACK, 24),
+                (_gnb_fp(freq, power), BLACK, 18),
+                (f"BW {bw:.0f}MHz" if bw is not None else "BW ?", BLACK, 18),
+                (f"PCI {pci}" if pci is not None else "PCI -", BLACK, 18),
+                (f"Cell {cell_id}" if cell_id is not None else "Cell -", BLACK, 18),
             ]
             key = f"{name}|{freq}|{power}|{bw}|{pci}|{cell_id}"
 

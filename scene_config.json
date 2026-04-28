@@ -8,359 +8,339 @@
   },
   "buildings": [
     {
-      "name": "Building_1",
+      "name": "2",
       "position": [
-        -300,
-        0,
-        0
+        59.72403390066965,
+        0.0,
+        51.85605875651042
       ],
       "size": [
-        50,
-        100,
-        30
+        50.0,
+        100.0,
+        30.0
       ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/Brownstone01_Building.usda",
-      "target_height_m": 400,
+      "color": [
+        0.75,
+        0.75,
+        0.75
+      ],
       "rotation_xyz_deg": [
-        -90,
-        0,
-        0
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "concrete"
+    },
+    {
+      "name": "TestBuilding_CloudTest",
+      "position": [
+        200.0,
+        0.0,
+        200.0
+      ],
+      "size": [
+        40.0,
+        50.0,
+        30.0
+      ],
+      "color": [
+        0.75,
+        0.75,
+        0.75
+      ],
+      "rotation_xyz_deg": [
+        0.0,
+        0.0,
+        0.0
       ]
     },
     {
-      "name": "Building_2",
+      "name": "1",
       "position": [
-        300,
-        0,
-        0
+        143.15260532924108,
+        0.0,
+        94.94696807861328
       ],
       "size": [
-        80,
-        30,
-        60
+        10.0,
+        10.0,
+        10.0
       ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/Brownstone02_Building.usda",
-      "target_height_m": 500,
+      "color": [
+        0.75,
+        0.75,
+        0.75
+      ],
       "rotation_xyz_deg": [
-        -90,
-        0,
-        0
+        0.0,
+        0.0,
+        0.0
       ]
+    },
+    {
+      "name": "3333",
+      "position": [
+        24.295462472098222,
+        0.0,
+        131.18939208984375
+      ],
+      "size": [
+        80.0,
+        30.0,
+        60.0
+      ],
+      "color": [
+        0.75,
+        0.75,
+        0.75
+      ],
+      "rotation_xyz_deg": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "glass"
+    },
+    {
+      "name": "BrownstoneTest_Final",
+      "position": [
+        400.0,
+        0.0,
+        400.0
+      ],
+      "size": [
+        30.0,
+        40.0,
+        25.0
+      ],
+      "color": [
+        0.8,
+        0.7,
+        0.6
+      ],
+      "rotation_xyz_deg": [
+        -90.0,
+        0.0,
+        0.0
+      ],
+      "usd": "/app/assets/building/Brownstone01_Building.usda",
+      "target_height_m": 400.0
     }
   ],
   "gnbs": [
     {
-      "name": "gNB_Macro_NW",
+      "name": "Demo_gNB_Final",
       "position": [
-        200,
-        50,
-        200
+        -240.0,
+        30.0,
+        183.50000381469727
       ],
       "color": [
         1.0,
-        0.6,
-        0.0
+        1.0,
+        1.0
       ],
-      "frequency_ghz": 3.5,
-      "power_dbm": 43,
-      "bandwidth_mhz": 100,
+      "power_dbm": 35.0,
       "active": true,
-      "target_height_m": 400
+      "freq_mhz": 2600.0,
+      "bw_hz": 20000000.0
     },
     {
-      "name": "gNB_Macro_SE",
+      "name": "1",
       "position": [
-        -200,
-        45,
-        -200
+        -560.0,
+        30.0,
+        71.00000381469727
       ],
       "color": [
         1.0,
-        0.4,
-        0.2
+        1.0,
+        1.0
       ],
-      "frequency_ghz": 3.5,
-      "power_dbm": 40,
-      "bandwidth_mhz": 100,
+      "power_dbm": 43.0,
       "active": true,
-      "target_height_m": 400
+      "freq_mhz": 2500.0,
+      "bw_hz": 100000000.0
     },
     {
-      "name": "gNB_Micro_Central",
+      "name": "Test_gNB_2",
       "position": [
-        0,
-        30,
-        0
+        156.86689104352678,
+        30.0,
+        257.37120564778644
       ],
       "color": [
-        0.2,
-        0.8,
-        0.4
+        1.0,
+        1.0,
+        1.0
       ],
-      "frequency_ghz": 2.6,
-      "power_dbm": 20,
-      "bandwidth_mhz": 20,
+      "power_dbm": 43.0,
       "active": true,
-      "target_height_m": 400
+      "freq_mhz": 3500.0,
+      "bw_hz": 100000000.0
+    },
+    {
+      "name": "E2E_gNB_1",
+      "position": [
+        242.00974818638394,
+        30.0,
+        46.704538981119796
+      ],
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "power_dbm": 43.0,
+      "active": true,
+      "freq_mhz": 3500.0,
+      "bw_hz": 100000000.0
     }
   ],
   "ues": [
     {
-      "name": "UE_Handover_Path",
-      "prim_path": "/World/UE_Handover_Path",
+      "name": "NewUE_FO_1777308608",
+      "prim_path": "/World/NewUE_FO_1777308608",
       "position": [
-        0,
-        0,
-        0
-      ],
-      "color": [
-        0.2,
-        0.8,
-        1.0
-      ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
-      "target_height_m": 50.0,
-      "speed_mps": 10.0,
-      "waypoints": [
-        [
-          0,
-          0,
-          0
-        ],
-        [
-          50,
-          0,
-          50
-        ],
-        [
-          100,
-          0,
-          100
-        ],
-        [
-          50,
-          0,
-          50
-        ],
-        [
-          0,
-          0,
-          0
-        ]
-      ]
-    },
-    {
-      "name": "UE_2",
-      "prim_path": "/World/UE_2",
-      "position": [
-        100,
-        0,
-        0
+        122.5811767578125,
+        0.0,
+        16.40151468912761
       ],
       "color": [
         0.5,
-        1.0,
+        0.5,
         0.5
       ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/male_party.usda",
-      "speed_mps": 0,
-      "target_height_m": 34.0
+      "speed_mps": 1.0,
+      "usd": "/app/assets/UE/female_office.usda",
+      "target_height_m": 50.0
     },
     {
-      "name": "UE_3",
-      "prim_path": "/World/UE_3",
+      "name": "33",
+      "prim_path": "/World/33",
       "position": [
-        0,
-        0,
-        100
+        100.0,
+        0.0,
+        100.0
       ],
       "color": [
-        1.0,
         0.5,
-        0.8
+        0.5,
+        0.5
       ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
+      "speed_mps": 3.0,
+      "usd": "/app/assets/UE/female_office.usda"
+    },
+    {
+      "name": "UETest_1777307945",
+      "prim_path": "/World/UETest_1777307945",
+      "position": [
+        61.43831961495536,
+        0.0,
+        179.73484802246094
+      ],
+      "color": [
+        0.5,
+        0.5,
+        0.5
+      ],
       "speed_mps": 5.0,
-      "target_height_m": 34.0,
+      "usd": "/app/assets/UE/female_office.usda",
+      "target_height_m": 50.0,
       "waypoints": [
-        [
-          0,
-          0,
-          100
-        ],
         [
           100,
           0,
           100
         ],
         [
-          100,
-          0,
-          0
-        ]
-      ]
-    },
-    {
-      "name": "UE_4",
-      "prim_path": "/World/UE_4",
-      "position": [
-        -100,
-        0,
-        100
-      ],
-      "color": [
-        1.0,
-        0.9,
-        0.2
-      ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/male_party.usda",
-      "speed_mps": 15.0,
-      "target_height_m": 34.0,
-      "waypoints": [
-        [
-          -100,
-          0,
-          100
-        ],
-        [
-          100,
-          0,
-          -100
-        ],
-        [
-          -100,
-          0,
-          100
-        ]
-      ]
-    },
-    {
-      "name": "UE_5",
-      "prim_path": "/World/UE_5",
-      "position": [
-        150,
-        0,
-        150
-      ],
-      "color": [
-        0.8,
-        0.4,
-        1.0
-      ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/UE/female_office.usda",
-      "speed_mps": 8.0,
-      "target_height_m": 34.0,
-      "waypoints": [
-        [
           150,
           0,
           150
         ],
         [
-          150,
+          200,
           0,
-          -150
-        ],
-        [
-          -150,
-          0,
-          -150
-        ],
-        [
-          -150,
-          0,
-          150
-        ],
-        [
-          150,
-          0,
-          150
+          200
         ]
       ]
     }
   ],
   "obstacles": [
     {
-      "name": "Building_3",
+      "name": "TestObstacle_1",
       "position": [
-        -100,
-        0,
-        -80
+        50.0,
+        0.0,
+        50.0
       ],
       "size": [
-        120,
-        20,
-        100
-      ],
-      "color": [
-        0.72,
-        0.36,
-        0.28
-      ],
-      "usd": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/factory.usda",
-      "material": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Materials/STONE_PAVERS.mdl",
-      "scale": [
-        1.0,
-        1.0,
-        1.0
-      ]
-    },
-    {
-      "name": "Building_4",
-      "position": [
-        50,
-        0,
-        -100
-      ],
-      "size": [
-        60,
-        40,
-        50
+        20.0,
+        20.0,
+        20.0
       ],
       "color": [
         0.5,
-        0.7,
-        0.9
+        0.5,
+        0.5
       ],
-      "material": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Materials/Cladding_Pella_White.mdl"
+      "material": "concrete"
     },
     {
-      "name": "Building_5",
+      "name": "TestObstacle1",
       "position": [
-        -80,
-        0,
-        100
+        200.0,
+        0.0,
+        0.0
       ],
       "size": [
-        100,
-        15,
-        80
+        20.0,
+        20.0,
+        20.0
       ],
       "color": [
-        0.3,
-        0.3,
-        0.3
-      ],
-      "material": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Materials/Rigid_insulation.mdl"
+        0.75,
+        0.75,
+        0.75
+      ]
     },
     {
-      "name": "Building_6",
+      "name": "E2E_Obstacle_Correct",
       "position": [
-        150,
-        0,
-        150
+        150.0,
+        0.0,
+        100.0
       ],
       "size": [
-        40,
-        50,
-        40
+        10.0,
+        10.0,
+        10.0
+      ],
+      "color": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "material": "concrete"
+    },
+    {
+      "name": "Obstacle_PathFix_Test",
+      "position": [
+        200.0,
+        0.0,
+        150.0
+      ],
+      "size": [
+        15.0,
+        15.0,
+        15.0
       ],
       "color": [
         0.6,
         0.6,
         0.6
       ],
-      "material": "/home/mitlab/XAPP_DT/Omnivers_platform/assets/building/brownstone/Materials/Default_New_Material.mdl"
+      "material": "brick"
     }
   ]
 }

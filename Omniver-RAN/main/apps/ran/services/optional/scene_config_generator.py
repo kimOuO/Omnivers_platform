@@ -34,11 +34,11 @@ class SceneConfigGeneratorService:
             "obstacles": [],
         }
 
-        # Query filters
-        filters = {} if scene_id is None else {"scene_id": scene_id}
+        # Query filters — only BuildingObject and ObstacleObject have scene_id
+        building_filters = {} if scene_id is None else {"scene_id": scene_id}
 
         # Buildings
-        buildings_qs = BuildingObject.objects.filter(**filters) if filters else BuildingObject.objects.all()
+        buildings_qs = BuildingObject.objects.filter(**building_filters) if building_filters else BuildingObject.objects.all()
         for b in buildings_qs:
             building_entry = {
                 "name": b.name,
@@ -55,8 +55,8 @@ class SceneConfigGeneratorService:
                 building_entry["material"] = b.material
             config["buildings"].append(building_entry)
 
-        # gNBs
-        gnbs_qs = GnbConfig.objects.filter(**filters) if filters else GnbConfig.objects.all()
+        # gNBs — no scene_id field, always fetch all
+        gnbs_qs = GnbConfig.objects.all()
         for g in gnbs_qs:
             gnb_entry = {
                 "name": g.name,
@@ -71,8 +71,8 @@ class SceneConfigGeneratorService:
                 gnb_entry["target_height_m"] = g.target_height_m
             config["gnbs"].append(gnb_entry)
 
-        # UEs
-        ues_qs = UeConfig.objects.filter(**filters) if filters else UeConfig.objects.all()
+        # UEs — no scene_id field, always fetch all
+        ues_qs = UeConfig.objects.all()
         for u in ues_qs:
             ue_entry = {
                 "name": u.name,
@@ -90,7 +90,7 @@ class SceneConfigGeneratorService:
             config["ues"].append(ue_entry)
 
         # Obstacles
-        obstacles_qs = ObstacleObject.objects.filter(**filters) if filters else ObstacleObject.objects.all()
+        obstacles_qs = ObstacleObject.objects.filter(**building_filters) if building_filters else ObstacleObject.objects.all()
         for o in obstacles_qs:
             obstacle_entry = {
                 "name": o.name,

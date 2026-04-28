@@ -24,7 +24,7 @@ def _build_snapshot(ext) -> dict:
     from .extension import _scan_stage
     stage = omni.usd.get_context().get_stage()
     builder = ext._get_scene_builder()
-    _, ues = _scan_stage(stage, builder)
+    _, ues, _ = _scan_stage(stage, builder)
     return {"type": "ue_update", "ts": time.time(), "ues": ues}
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from main.apps.ran.models import GnbConfig
 from main.apps.ran.serializers._base import Serializer
 
 
@@ -13,22 +14,75 @@ def _as_xyz(v: Any) -> dict[str, float]:
     return {"x": 0.0, "y": 0.0, "z": 0.0}
 
 
+def _as_list(v: Any) -> list[float]:
+    if isinstance(v, dict):
+        return [float(v.get("x", 0)), float(v.get("y", 0)), float(v.get("z", 0))]
+    if isinstance(v, (list, tuple)) and len(v) == 3:
+        return [float(v[0]), float(v[1]), float(v[2])]
+    return [0.0, 0.0, 0.0]
+
+
 class GnbReadSerializer(Serializer):
     @classmethod
-    def to_representation(cls, instance: dict[str, Any]) -> dict[str, Any]:
-        freq_mhz = instance.get("freq_mhz")
-        if freq_mhz is None and "frequency_ghz" in instance:
-            freq_mhz = float(instance["frequency_ghz"]) * 1000.0
-        bw_hz = instance.get("bw_hz")
-        if bw_hz is None and "bandwidth_mhz" in instance:
-            bw_hz = float(instance["bandwidth_mhz"]) * 1_000_000.0
+    def to_representation(cls, instance: Any) -> dict[str, Any]:
+        # Handle GnbConfig ORM object
+        if isinstance(instance, GnbConfig):
+            return {
+                "gnb_uuid": instance.gnb_uuid,
+                "name": instance.name,
+                "position": [float(instance.pos_x or 0), float(instance.pos_y or 0), float(instance.pos_z or 0)],
+                "frequency_ghz": float((instance.freq_mhz or 0) / 1000.0),
+                "power_dbm": float(instance.power_dbm or 0),
+                "bandwidth_mhz": float((instance.bw_hz or 0) / 1_000_000.0),
+                "active": bool(instance.active),
+                "created_at": instance.gnb_created_at.isoformat() if instance.gnb_created_at else None,
+                "updated_at": instance.gnb_updated_at.isoformat() if instance.gnb_updated_at else None,
+            }
+
+        # Handle dict (from Kit)
+        if isinstance(instance, dict):
+            freq_mhz = instance.get("freq_mhz")
+            if freq_mhz is None and "frequency_ghz" in instance:
+                freq_mhz = float(instance["frequency_ghz"]) * 1000.0
+            bw_hz = instance.get("bw_hz")
+            if bw_hz is None and "bandwidth_mhz" in instance:
+                bw_hz = float(instance["bandwidth_mhz"]) * 1_000_000.0
+            return {
+                "name": instance.get("name"),
+                "position": _as_xyz(instance.get("position") or instance.get("pos")),
+                "frequency_ghz": float((freq_mhz or 0) / 1000.0),
+                "power_dbm": float(instance.get("power_dbm") or 0),
+                "bandwidth_mhz": float((bw_hz or 0) / 1_000_000.0),
+                "active": bool(instance.get("active", True)),
+            }
+
+        return {}
+
+
+class GnbWriteSerializer(Serializer):
+    """Serializer for creating a new gNB."""
+    def _validate_write(self, data: dict[str, Any]) -> dict[str, Any] | None:
+        name = self._require(data, "name", str)
+        if not name:
+            self._errors["name"] = "required (str)"
+            return None
+
+        pos_raw = data.get("position")
+        position = _as_xyz(pos_raw) if pos_raw is not None else _as_xyz([0, 0, 0])
+
+        freq_mhz = self._optional(data, "frequency_ghz", (int, float))
+        bw_mhz = self._optional(data, "bandwidth_mhz", (int, float))
+        power_dbm = self._optional(data, "power_dbm", (int, float))
+
         return {
-            "name": instance.get("name"),
-            "position": _as_xyz(instance.get("position") or instance.get("pos")),
-            "freq_mhz": float(freq_mhz or 0),
-            "power_dbm": float(instance.get("power_dbm") or 0),
-            "bw_hz": float(bw_hz or 0),
-            "active": bool(instance.get("active", True)),
+            "name": name,
+            "pos_x": float(position["x"]),
+            "pos_y": float(position["y"]),
+            "pos_z": float(position["z"]),
+            "freq_mhz": float(freq_mhz * 1000.0) if freq_mhz else 3500.0,
+            "bw_hz": float(bw_mhz * 1_000_000.0) if bw_mhz else 100_000_000.0,
+            "power_dbm": float(power_dbm) if power_dbm else 43,
+            "active": data.get("active", True),
         }
 
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from django.db import transaction
-
 from django.conf import settings
 
 from main.apps.ran.actors._http import actor, parse_body
@@ -9,11 +7,13 @@ from main.apps.ran.models import GnbConfig, SceneSnapshot
 from main.apps.ran.serializers.gnb_serializers import (
     GnbReadSerializer,
     GnbStateWriteSerializer,
+    GnbWriteSerializer,
 )
 from main.apps.ran.services.business.kit_operations import KitBusinessService
 from main.apps.ran.services.business.ranpsim_operations import RanpsimBusinessService
 from main.apps.ran.services.business.sqldb_operations import SqlDbBusinessService
 from main.apps.ran.services.common.timestamp_service import TimestampService
+from main.apps.ran.services.common.uuid_service import UUIDService
 from main.utils.logger import get_logger
 from main.utils.response import error_response, success_response
 
@@ -25,17 +25,60 @@ class GNBReader:
     @actor
     def read(request):  # noqa: ARG004
         try:
-            raw = KitBusinessService.list_gnbs()
+            gnbs = SqlDbBusinessService.list_entities(GnbConfig)
+            output = [GnbReadSerializer.to_representation(g) for g in gnbs]
+            return success_response(output)
         except Exception as e:  # noqa: BLE001
-            return error_response("Kit unreachable", {"detail": str(e)}, 502)
-        output = [GnbReadSerializer.to_representation(x) for x in (raw or [])]
-        return success_response(output)
+            return error_response("Failed to read gNBs from database", {"detail": str(e)}, 500)
 
 
 class GNBController:
     @staticmethod
     @actor
-    @transaction.atomic
+    def create(request):
+        data, err = parse_body(request)
+        if err is not None:
+            return err
+
+        s = GnbWriteSerializer(data=data)
+        if not s.is_valid():
+            return error_response("Validation failed", s.errors, 400)
+
+        v = s.validated_data
+        gnb_uuid = UUIDService.generate_uuid("gnb", v["name"])
+        ts = TimestampService.get_current_timestamp()
+
+        entity_data = {
+            "gnb_uuid": gnb_uuid,
+            "gnb_created_at": ts,
+            "gnb_updated_at": ts,
+            **v,
+        }
+
+        gnb = SqlDbBusinessService.create_entity(GnbConfig, entity_data)
+        output = GnbReadSerializer.to_representation(gnb)
+        return success_response(output, "gNB created", 201)
+
+    @staticmethod
+    @actor
+    def delete(request):
+        data, err = parse_body(request)
+        if err is not None:
+            return err
+
+        name = data.get("name")
+        if not name or not isinstance(name, str):
+            return error_response("Validation failed", {"name": "required (str)"}, 400)
+
+        cfg = SqlDbBusinessService.find_entity(GnbConfig, name=name)
+        if cfg is None:
+            return error_response(f"gNB '{name}' not found", status=404)
+
+        SqlDbBusinessService.delete_entity(cfg)
+        return success_response({"name": name}, "gNB deleted")
+
+    @staticmethod
+    @actor
     def update(request):
         data, err = parse_body(request)
         if err is not None:

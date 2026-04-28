@@ -12,7 +12,7 @@ from typing import Any
 
 from django.db import transaction
 
-from main.apps.ran.models import SignalHistory, UeState
+from main.apps.ran.models import SignalHistory, UeState, PositionHistory
 from main.apps.ran.services.business.kit_operations import KitBusinessService
 from main.apps.ran.services.business.sqldb_operations import SqlDbBusinessService
 from main.apps.ran.services.common.timestamp_service import TimestampService
@@ -28,11 +28,11 @@ class IngestBusinessService:
     @staticmethod
     @transaction.atomic
     def ingest_signals(signals: list[dict[str, Any]], ts=None, session_uuid=None) -> dict[str, int]:
-        """寫入 signal_history / ue_state 並 push 給 Kit。
+        """寫入 signal_history / ue_state / position_history 並 push 給 Kit。
 
         Args:
-            signals: [{ue_name, serving_cell, rsrp_dbm, sinr_db, rsrp_map}, ...]
-                     已 validate 過的乾淨資料
+            signals: [{ue_name, serving_cell, rsrp_dbm, sinr_db, rsrp_map, position?}, ...]
+                     已 validate 過的乾淨資料。position 可選，為 [x, y, z]。
             ts: 時間戳 (datetime) — 不給則用現在
             session_uuid: 可選，來自 RAN-sim 的 session identifier
 
@@ -57,6 +57,21 @@ class IngestBusinessService:
                     "signal_ts": ts,
                 },
             )
+            # 1b. 位置歷史（若提供）
+            if "position" in sig and sig["position"] is not None:
+                position = sig["position"]
+                if isinstance(position, list) and len(position) == 3:
+                    SqlDbBusinessService.create_entity(
+                        PositionHistory,
+                        {
+                            "session_uuid": session_uuid,
+                            "entity_name": sig["ue_name"],
+                            "entity_type": "ue",
+                            "x": float(position[0]),
+                            "y": float(position[1]),
+                            "z": float(position[2]),
+                        },
+                    )
             # 2. 最新快照 upsert
             SqlDbBusinessService.upsert_entity(
                 UeState,

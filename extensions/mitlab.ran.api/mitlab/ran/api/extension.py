@@ -63,25 +63,54 @@ def _get_ue_signal(prim):
 
 
 def _scan_stage(stage, builder=None):
-    """Walk /World/* and return (gnbs, ues). builder gives config & anim map."""
+    """Walk /World/* and return (gnbs, ues, buildings). builder gives config & anim map."""
     gnbs: list = []
     ues: list = []
+    buildings: list = []
     if stage is None:
-        return gnbs, ues
+        return gnbs, ues, buildings
     world = stage.GetPrimAtPath("/World")
     if not world.IsValid():
-        return gnbs, ues
+        return gnbs, ues, buildings
 
     config_gnbs = {}
+    config_buildings = {}
+    config_ues = {}
     animated = {}
     if builder is not None:
         config_gnbs = {g["name"]: g for g in ((builder._config or {}).get("gnbs") or [])}
+        config_buildings = {b["name"]: b for b in ((builder._config or {}).get("buildings") or [])}
+        config_ues = {u["name"]: u for u in ((builder._config or {}).get("ues") or [])}
         animated = {ue["prim_path"]: ue for ue in getattr(builder, "_animated_ues", [])}
 
+    import re
+    def _to_prim_name(name: str) -> str:
+        """Sanitize name to match scene_builder naming."""
+        sanitized = re.sub(r'[^A-Za-z0-9_]', '_', str(name))
+        if sanitized and sanitized[0].isdigit():
+            sanitized = f'_{sanitized}'
+        return sanitized or '_unnamed'
+
+    # Create lookup: sanitized_name -> original_name
+    building_lookup = {_to_prim_name(name): name for name in config_buildings.keys()}
+    gnb_lookup = {_to_prim_name(name): name for name in config_gnbs.keys()}
+    ue_lookup = {_to_prim_name(name): name for name in config_ues.keys()}
+
     for child in world.GetChildren():
-        name = child.GetName()
-        if name.startswith("gNB"):
-            cfg = config_gnbs.get(name, {})
+        prim_name = child.GetName()
+
+        # Determine type by checking child structure
+        # Buildings have /Mesh (cube) or /Asset (USD reference), gNBs have /Tower and /Antenna
+        child_names = {c.GetName() for c in child.GetChildren()}
+        has_mesh = "Mesh" in child_names
+        has_asset = "Asset" in child_names  # USD reference building
+        has_tower = "Tower" in child_names
+        has_antenna = "Antenna" in child_names
+
+        # Check for gNB (has Tower and Antenna)
+        if (has_tower and has_antenna) and prim_name in gnb_lookup:
+            original_name = gnb_lookup[prim_name]
+            cfg = config_gnbs[original_name]
             # gNB container Xform has no translate (actual position lives on the
             # Tower/Antenna children). Read from scene config instead.
             cfg_pos = cfg.get("position")
@@ -90,18 +119,39 @@ def _scan_stage(stage, builder=None):
             else:
                 pos = _get_translate(child)
             gnbs.append({
-                "name": name,
+                "name": original_name,
                 "position": pos,
                 "freq_mhz": float(cfg.get("frequency_ghz", 0) or 0) * 1000.0,
                 "power_dbm": float(cfg.get("power_dbm", 0) or 0),
                 "bw_hz": float(cfg.get("bandwidth_mhz", 0) or 0) * 1_000_000.0,
                 "active": True,
             })
-        elif name.startswith("UE"):
+
+        # Check for Building (has Mesh for cube OR Asset for USD reference) — check even if gNB matched
+        if (has_mesh or has_asset) and prim_name in building_lookup:
+            original_name = building_lookup[prim_name]
+            cfg = config_buildings[original_name]
+            # Building position is in config (set on Mesh child, not container)
+            cfg_pos = cfg.get("position")
+            if cfg_pos and len(cfg_pos) == 3:
+                pos = {"x": float(cfg_pos[0]), "y": float(cfg_pos[1]), "z": float(cfg_pos[2])}
+            else:
+                pos = _get_translate(child)
+            size = cfg.get("size") or [1, 1, 1]
+            buildings.append({
+                "name": original_name,
+                "position": pos,
+                "size": {"x": float(size[0]), "y": float(size[1]), "z": float(size[2])},
+                "material": cfg.get("material"),
+            })
+
+        # Check for UE (neither gNB nor building)
+        if prim_name in ue_lookup:
+            original_name = ue_lookup[prim_name]
             sig = _get_ue_signal(child)
             anim = animated.get(str(child.GetPath()))
             ues.append({
-                "name": name,
+                "name": original_name,
                 "position": _get_translate(child),
                 "serving_cell": sig["serving_cell"],
                 "rsrp_dbm": sig["rsrp_dbm"],
@@ -109,7 +159,7 @@ def _scan_stage(stage, builder=None):
                 "rsrp_map": sig["rsrp_map"],
                 "speed_mps": float(anim["speed"]) if anim else None,
             })
-    return gnbs, ues
+    return gnbs, ues, buildings
 
 
 # ----------------------------------------------------------------------------
@@ -157,10 +207,8 @@ class RANAPIHandler(BaseHTTPRequestHandler):
             if parts == ["scene", "status"]:
                 stage = omni.usd.get_context().get_stage()
                 builder = ext._get_scene_builder()
-                gnbs, ues = _scan_stage(stage, builder)
-                buildings = 0
-                if builder and builder._config:
-                    buildings = len(builder._config.get("buildings") or [])
+                gnbs, ues, buildings_list = _scan_stage(stage, builder)
+                buildings = len(buildings_list)
                 self._send_json({
                     "buildings": buildings,
                     "gnbs": len(gnbs),
@@ -173,7 +221,7 @@ class RANAPIHandler(BaseHTTPRequestHandler):
             if parts == ["gnbs"] or (len(parts) == 2 and parts[0] == "gnb"):
                 stage = omni.usd.get_context().get_stage()
                 builder = ext._get_scene_builder()
-                gnbs, _ = _scan_stage(stage, builder)
+                gnbs, _, _ = _scan_stage(stage, builder)
                 if parts == ["gnbs"]:
                     self._send_json(gnbs); return
                 found = next((g for g in gnbs if g["name"] == parts[1]), None)
@@ -186,7 +234,7 @@ class RANAPIHandler(BaseHTTPRequestHandler):
             if parts == ["ues"] or (len(parts) == 2 and parts[0] == "ue"):
                 stage = omni.usd.get_context().get_stage()
                 builder = ext._get_scene_builder()
-                _, ues = _scan_stage(stage, builder)
+                _, ues, _ = _scan_stage(stage, builder)
                 if parts == ["ues"]:
                     self._send_json(ues); return
                 found = next((u for u in ues if u["name"] == parts[1]), None)
@@ -200,18 +248,7 @@ class RANAPIHandler(BaseHTTPRequestHandler):
             if parts == ["scene", "layout"]:
                 stage = omni.usd.get_context().get_stage()
                 builder = ext._get_scene_builder()
-                gnbs, ues = _scan_stage(stage, builder)
-                buildings = []
-                if builder and builder._config:
-                    for b in (builder._config.get("buildings") or []):
-                        pos = b.get("position") or [0, 0, 0]
-                        size = b.get("size") or [1, 1, 1]
-                        buildings.append({
-                            "name": b.get("name", ""),
-                            "position": {"x": float(pos[0]), "y": float(pos[1]), "z": float(pos[2])},
-                            "size": {"x": float(size[0]), "y": float(size[1]), "z": float(size[2])},
-                            "material": b.get("material"),
-                        })
+                gnbs, ues, buildings = _scan_stage(stage, builder)
                 ground = (builder._config or {}).get("ground", {}) if builder else {}
                 self._send_json({
                     "buildings": buildings,
@@ -238,11 +275,36 @@ class RANAPIHandler(BaseHTTPRequestHandler):
             if parts == ["scene", "config"]:
                 body = self._read_body()
                 ext._runtime_config = body
-                import os
-                config_file = os.path.expanduser("~/.omniverse_runtime_config.json")
-                with open(config_file, "w") as f:
-                    json.dump(body, f)
-                ext._enqueue("build_scene"); self._send_json({"status": "queued"}); return
+                import os, sys
+
+                # Try multiple locations in priority order
+                locations = [
+                    os.path.expanduser("~/.omniverse_runtime_config.json"),  # Home
+                    "/tmp/.omniverse_runtime_config.json",  # /tmp fallback
+                    os.path.expanduser("~/omniverse/scene_config.json"),  # Alt legacy
+                    "/home/mitlab/XAPP_DT/Omnivers_platform/scene_config.json",  # Direct path
+                ]
+
+                config_file = None
+                for path in locations:
+                    try:
+                        # Ensure directory exists
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        with open(path, "w") as f:
+                            json.dump(body, f)
+                        config_file = path
+                        print(f"[RAN API] Config saved to {path} ({len(body.get('buildings', []))} buildings)")
+                        break
+                    except Exception as e:
+                        print(f"[RAN API] Failed to write to {path}: {e}")
+                        continue
+
+                if not config_file:
+                    print("[RAN API] WARNING: Failed to save config to any location!")
+                    self._send_json({"status": "warning", "message": "Could not save config"}, 500)
+                else:
+                    self._send_json({"status": "saved", "path": config_file})
+                return
             if parts == ["animation", "start"]:
                 ext._enqueue("start_animation"); self._send_json({"status": "queued"}); return
             if parts == ["animation", "stop"]:

@@ -9,6 +9,7 @@ from main.apps.ran.models.platform_event import PlatformEvent
 from main.apps.ran.models.simulation_session import SimulationSession
 from main.apps.ran.models.building_object import BuildingObject
 from main.apps.ran.models.obstacle_object import ObstacleObject
+from main.apps.ran.models.usd_asset import UsdAsset
 
 __all__ = [
     "SceneSnapshot",
@@ -22,4 +23,5 @@ __all__ = [
     "SimulationSession",
     "BuildingObject",
     "ObstacleObject",
+    "UsdAsset",
 ]
