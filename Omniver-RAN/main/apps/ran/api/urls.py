@@ -50,6 +50,7 @@ urlpatterns = [
     path("RAN/UE/UEController/delete", UEController.delete, name="ue_delete"),
     path("RAN/UE/UEController/move", UEController.move, name="ue_move"),
     path("RAN/UE/UEController/trajectory", UEController.trajectory, name="ue_trajectory"),
+    path("RAN/UE/UEController/batch_move", UEController.batch_move, name="ue_batch_move"),
 
     # ---- RAN/GNB ----
     path("RAN/GNB/GNBReader/read", GNBReader.read, name="gnb_read"),

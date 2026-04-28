@@ -156,3 +156,36 @@ class UEController:
             return error_response("Kit unreachable", {"detail": str(e)}, 502)
 
         return success_response({"name": v["name"], "waypoints_count": len(v["waypoints"])}, "queued")
+
+    @staticmethod
+    @actor
+    def batch_move(request):
+        """批次移動多個 UE（用於 Playback 3D 重播）。
+
+        Body: { "ues": [{"name": "ue1", "x": 10.0, "y": 0.0, "z": 5.0}, ...] }
+        """
+        data, err = parse_body(request)
+        if err is not None:
+            return err
+
+        ues = data.get("ues")
+        if not isinstance(ues, list):
+            return error_response("Validation failed", {"ues": "required (list)"}, 400)
+
+        moved = []
+        for ue in ues:
+            name = ue.get("name")
+            if not name:
+                continue
+            try:
+                KitBusinessService.move_ue(
+                    name,
+                    float(ue.get("x", 0.0)),
+                    float(ue.get("y", 0.0)),
+                    float(ue.get("z", 0.0)),
+                )
+                moved.append(name)
+            except Exception as e:  # noqa: BLE001
+                log.warning("batch_move: Kit move failed for %s: %s", name, e)
+
+        return success_response({"moved": moved, "count": len(moved)})
