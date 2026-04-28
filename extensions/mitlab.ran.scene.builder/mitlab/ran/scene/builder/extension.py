@@ -56,6 +56,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print("[mitlab.ran.scene.builder] Extension shutdown")
 
     def _load_config(self):
+        print("[RAN] === _load_config() START ===")
         # Priority: Dynamic API (DB-driven) > runtime_config file > env var > legacy files
         # 1. Try dynamic API first (always fetch fresh from DB)
         backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
