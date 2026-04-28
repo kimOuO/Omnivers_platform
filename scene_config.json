@@ -74,8 +74,10 @@
       "rotation_xyz_deg": [
         0.0,
         0.0,
-        0.0
-      ]
+        -90.0
+      ],
+      "target_height_m": 50,
+      "usd_path": "/app/assets/building/Brownstone01_Building.usda"
     },
     {
       "name": "3333",
