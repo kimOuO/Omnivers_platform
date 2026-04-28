@@ -283,15 +283,15 @@ class RANLabelsExtension(omni.ext.IExt):
             print(f"[mitlab.ran.labels] Tf.Notice.Register failed: {e}")
 
     def _on_usd_changed(self, notice, sender) -> None:
-        """Fires synchronously on any USD write. Mark dirty if a UE/gNB changed.
+        """Fires synchronously on any USD write. Mark dirty if anything under /World changed.
         Kept cheap — just flips a bool. Real work happens on next frame tick."""
         try:
             resynced = notice.GetResyncedPaths()
             changed_info = notice.GetChangedInfoOnlyPaths()
 
             for p in resynced:
-                nm = p.GetPrimPath().name
-                if nm.startswith("UE") or nm.startswith("gNB"):
+                path_str = str(p.GetPrimPath())
+                if path_str.startswith("/World/"):
                     self._data_dirty = True
                     return
 
@@ -300,9 +300,9 @@ class RANLabelsExtension(omni.ext.IExt):
                 if not prim_path or str(prim_path) == "/":
                     continue
                 path_str = str(prim_path)
-                # Mark dirty if any UE/gNB prim or its descendants changed
-                # This catches attribute updates (ran:*), xformOps (position), etc.
-                if "UE" in path_str or "gNB" in path_str:
+                # Mark dirty for any change under /World — covers UEs with numeric names
+                # (e.g. /World/_3 from UE named "3") as well as traditional UE_xxx / gNB_xxx.
+                if path_str.startswith("/World/"):
                     self._data_dirty = True
                     return
         except Exception as e:  # noqa: BLE001
@@ -482,8 +482,8 @@ class RANLabelsExtension(omni.ext.IExt):
 
             child_names = {c.GetName() for c in child.GetChildren()}
 
-            # Determine type: gNB has Tower
-            if "Tower" in child_names:
+            # Determine type: gNB has Tower (single-cell legacy) or cell_N children (multi-cell)
+            if "Tower" in child_names or any(n.startswith("cell_") for n in child_names):
                 is_ue = False
             # UE: has ran:rsrp_dbm or Body/Head children
             elif child.HasAttribute("ran:rsrp_dbm") or "Body" in child_names:
