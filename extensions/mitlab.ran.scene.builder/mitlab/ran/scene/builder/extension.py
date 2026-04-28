@@ -62,7 +62,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         try:
             import urllib.request
             import json as json_lib
-            api_url = f"{backend_url}/api/v0.1/RAN/Scene/LayoutReader/read"
+            api_url = f"{backend_url}/api/v0.1/RAN/Scene/SceneLayoutReader/read"
             print(f"[RAN] Loading config from API: {api_url}")
             with urllib.request.urlopen(api_url, timeout=5) as response:
                 data = json_lib.loads(response.read().decode())
