@@ -56,25 +56,30 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print("[mitlab.ran.scene.builder] Extension shutdown")
 
     def _load_config(self):
-        # Priority: runtime_config file (from API POST /scene/config) > env var RAN_SCENE_CONFIG > legacy files
+        # Priority: API runtime_config > env var RAN_SCENE_CONFIG > legacy files
+        #
+        # API extension sends POST /scene/config with DB-driven config and saves to:
+        # ~/.omniverse_runtime_config.json (primary) or /tmp/.omniverse_runtime_config.json (fallback)
+
         candidates = []
 
-        # 1. Home runtime config (from API)
+        # 1. Home runtime config (from API POST /scene/config) — MOST RECENT, highest priority
         home_runtime = os.path.expanduser("~/.omniverse_runtime_config.json")
-        candidates.append(("home runtime", home_runtime))
+        candidates.append(("API runtime (home)", home_runtime))
 
         # 2. /tmp runtime config (fallback if home write fails)
         tmp_runtime = "/tmp/.omniverse_runtime_config.json"
-        candidates.append(("/tmp runtime", tmp_runtime))
+        candidates.append(("API runtime (/tmp)", tmp_runtime))
 
         # 3. RAN_SCENE_CONFIG env var
         env_path = os.environ.get("RAN_SCENE_CONFIG")
         if env_path:
             candidates.append(("env RAN_SCENE_CONFIG", os.path.expanduser(env_path)))
 
-        # 4. Legacy paths
+        # 4. Static scene_config.json (fallback only if API hasn't sent config yet)
+        candidates.append(("static /app", "/app/scene_config.json"))
+        candidates.append(("static host", os.path.expanduser("~/XAPP_DT/Omnivers_platform/scene_config.json")))
         candidates.append(("legacy ~/omniverse", os.path.expanduser("~/omniverse/scene_config.json")))
-        candidates.append(("legacy old static", os.path.expanduser("~/XAPP_DT/Omnivers_platform/scene_config.json")))
 
         # Try each candidate in order
         for name, path in candidates:
@@ -82,7 +87,14 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 print(f"[RAN] Loading config from {name}: {path}")
                 try:
                     with open(path, "r") as f:
-                        return json.load(f)
+                        config = json.load(f)
+                        # Log building info for debugging
+                        buildings = config.get("buildings", [])
+                        if buildings:
+                            b1 = next((b for b in buildings if b.get("name") == "1"), None)
+                            if b1:
+                                print(f"[RAN]   Building_1 target_height_m = {b1.get('target_height_m')}")
+                        return config
                 except Exception as e:
                     print(f"[RAN] Failed to load from {name}: {e}")
                     continue
