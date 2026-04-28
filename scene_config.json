@@ -145,7 +145,10 @@
       "power_dbm": 35.0,
       "active": true,
       "freq_mhz": 2600.0,
-      "bw_hz": 20000000.0
+      "bw_hz": 20000000.0,
+      "cells": [
+        {"pci": 10, "azimuth_deg": 0, "cell_id": "Demo_gNB_Final_cell0"}
+      ]
     },
     {
       "name": "1",
@@ -162,7 +165,12 @@
       "power_dbm": 43.0,
       "active": true,
       "freq_mhz": 2500.0,
-      "bw_hz": 100000000.0
+      "bw_hz": 100000000.0,
+      "cells": [
+        {"pci": 100, "azimuth_deg": 0, "cell_id": "gnb1_cell0"},
+        {"pci": 101, "azimuth_deg": 120, "cell_id": "gnb1_cell1"},
+        {"pci": 102, "azimuth_deg": 240, "cell_id": "gnb1_cell2"}
+      ]
     },
     {
       "name": "Test_gNB_2",
@@ -179,7 +187,12 @@
       "power_dbm": 43.0,
       "active": true,
       "freq_mhz": 3500.0,
-      "bw_hz": 100000000.0
+      "bw_hz": 100000000.0,
+      "cells": [
+        {"pci": 200, "azimuth_deg": 0, "cell_id": "Test_gNB_2_cell0"},
+        {"pci": 201, "azimuth_deg": 120, "cell_id": "Test_gNB_2_cell1"},
+        {"pci": 202, "azimuth_deg": 240, "cell_id": "Test_gNB_2_cell2"}
+      ]
     },
     {
       "name": "E2E_gNB_1",
@@ -196,7 +209,12 @@
       "power_dbm": 43.0,
       "active": true,
       "freq_mhz": 3500.0,
-      "bw_hz": 100000000.0
+      "bw_hz": 100000000.0,
+      "cells": [
+        {"pci": 300, "azimuth_deg": 0, "cell_id": "E2E_gNB_1_cell0"},
+        {"pci": 301, "azimuth_deg": 120, "cell_id": "E2E_gNB_1_cell1"},
+        {"pci": 302, "azimuth_deg": 240, "cell_id": "E2E_gNB_1_cell2"}
+      ]
     }
   ],
   "ues": [

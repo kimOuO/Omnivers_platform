@@ -86,16 +86,23 @@ class KitBusinessService:
         rsrp_dbm: float,
         sinr_db: float,
         rsrp_map: dict[str, float],
+        serving_gnb: str | None = None,
+        serving_pci: int | None = None,
+        serving_cell_id: str | None = None,
     ) -> None:
-        KitBusinessService._post(
-            f"/ue/{name}/signal",
-            {
-                "serving_cell": serving_cell,
-                "rsrp_dbm": rsrp_dbm,
-                "sinr_db": sinr_db,
-                "rsrp_map": rsrp_map,
-            },
-        )
+        body = {
+            "serving_cell": serving_cell,
+            "rsrp_dbm": rsrp_dbm,
+            "sinr_db": sinr_db,
+            "rsrp_map": rsrp_map,
+        }
+        if serving_gnb is not None:
+            body["serving_gnb"] = serving_gnb
+        if serving_pci is not None:
+            body["serving_pci"] = serving_pci
+        if serving_cell_id is not None:
+            body["serving_cell_id"] = serving_cell_id
+        KitBusinessService._post(f"/ue/{name}/signal", body)
 
     # ---- gNB ----
 

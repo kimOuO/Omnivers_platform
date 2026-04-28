@@ -4,9 +4,10 @@ Follows backend_rule.md §7-1 URL format: /api/{version}/{System}/{Module}/{Elem
 """
 from django.urls import re_path
 
-from main.apps.ran.consumers import UELiveConsumer
+from main.apps.ran.consumers import UELiveConsumer, IngestConsumer
 
 
 websocket_urlpatterns = [
     re_path(r"^api/v0\.1/RAN/UE/live$", UELiveConsumer.as_asgi(), name="ue_live"),
+    re_path(r"^api/v0\.1/RAN/Ingest/ws/$", IngestConsumer.as_asgi(), name="ingest_ws"),
 ]

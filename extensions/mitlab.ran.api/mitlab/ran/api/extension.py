@@ -486,6 +486,9 @@ class RANAPIExtension(omni.ext.IExt):
                         rsrp_dbm=cmd.get("rsrp_dbm"),
                         sinr_db=cmd.get("sinr_db"),
                         rsrp_map=cmd.get("rsrp_map"),
+                        serving_gnb=cmd.get("serving_gnb"),
+                        serving_pci=cmd.get("serving_pci"),
+                        serving_cell_id=cmd.get("serving_cell_id"),
                     )
                 elif action == "update_gnb":
                     builder.update_gnb(

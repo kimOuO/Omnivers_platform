@@ -76,7 +76,10 @@ def _get_gnb_cfg():
 
 
 def _read_signal(prim):
-    out = {"serving_cell": None, "rsrp_dbm": None, "sinr_db": None}
+    out = {
+        "serving_cell": None, "rsrp_dbm": None, "sinr_db": None,
+        "serving_gnb": None, "serving_pci": None, "serving_cell_id": None
+    }
     a = prim.GetAttribute("ran:serving_cell")
     if a and a.HasValue():
         out["serving_cell"] = str(a.Get())
@@ -86,6 +89,21 @@ def _read_signal(prim):
     a = prim.GetAttribute("ran:sinr_db")
     if a and a.HasValue():
         out["sinr_db"] = float(a.Get())
+    a = prim.GetAttribute("ran:serving_gnb")
+    if a and a.HasValue():
+        out["serving_gnb"] = str(a.Get())
+    a = prim.GetAttribute("ran:serving_pci")
+    if a and a.HasValue():
+        try:
+            out["serving_pci"] = int(a.Get())
+        except (ValueError, TypeError):
+            pass
+    a = prim.GetAttribute("ran:serving_cell_id")
+    if a and a.HasValue():
+        out["serving_cell_id"] = str(a.Get())
+    prim_path = str(prim.GetPath()) if prim.IsValid() else "INVALID"
+    if out["rsrp_dbm"] is not None:
+        print(f"[labels] _read_signal({prim_path}): gnb={out['serving_gnb']}, cell={out['serving_cell_id']}, rsrp={out['rsrp_dbm']}, sinr={out['sinr_db']}")
     return out
 
 
@@ -142,7 +160,7 @@ class _LabelWidget:
 
     def __init__(self, container, is_ue: bool):
         self.is_ue = is_ue
-        n_rows = 4 if is_ue else 5   # gNB now carries 5 rows: name, freq/power, BW, PCI, cell
+        n_rows = 5   # UE: name, gNB, Cell/PCI, RSRP, SINR; gNB: name, freq/power, BW, PCI, cell
         bg = BG_DARK if is_ue else BG_LIGHT
         with container:
             self.placer = ui.Placer(offset_x=0, offset_y=0, draggable=False)
@@ -268,17 +286,27 @@ class RANLabelsExtension(omni.ext.IExt):
         """Fires synchronously on any USD write. Mark dirty if a UE/gNB changed.
         Kept cheap — just flips a bool. Real work happens on next frame tick."""
         try:
-            for p in notice.GetResyncedPaths():
+            resynced = notice.GetResyncedPaths()
+            changed_info = notice.GetChangedInfoOnlyPaths()
+
+            for p in resynced:
                 nm = p.GetPrimPath().name
                 if nm.startswith("UE") or nm.startswith("gNB"):
                     self._data_dirty = True
                     return
-            for p in notice.GetChangedInfoOnlyPaths():
-                nm = p.GetPrimPath().name
-                if nm.startswith("UE") or nm.startswith("gNB"):
+
+            for p in changed_info:
+                prim_path = p.GetPrimPath()
+                if not prim_path or str(prim_path) == "/":
+                    continue
+                path_str = str(prim_path)
+                # Mark dirty if any UE/gNB prim or its descendants changed
+                # This catches attribute updates (ran:*), xformOps (position), etc.
+                if "UE" in path_str or "gNB" in path_str:
                     self._data_dirty = True
                     return
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            print(f"[labels] USD notice error: {e}")
             self._data_dirty = True
 
     # ---- overlay attach --------------------------------------------------
@@ -431,6 +459,8 @@ class RANLabelsExtension(omni.ext.IExt):
         camera_moved = self._last_mvp is None or mvp != self._last_mvp
         if not (self._data_dirty or camera_moved):
             return
+        if self._tick_count % 60 == 0:
+            print(f"[labels] tick #{self._tick_count}: dirty={self._data_dirty}, camera_moved={camera_moved}")
         self._last_mvp = Gf.Matrix4d(mvp)
         self._data_dirty = False
 
@@ -520,27 +550,42 @@ class RANLabelsExtension(omni.ext.IExt):
 
         if is_ue:
             sig = _read_signal(prim)
+            gnb_str = sig["serving_gnb"] or "-"
+            cell_pci_str = f"Cell {sig['serving_cell_id']} PCI {sig['serving_pci']}" if sig['serving_cell_id'] else "-"
             rows = [
                 (name, BLACK, 24),
-                (sig["serving_cell"] or "-", BLACK, 18),
+                (gnb_str, BLACK, 18),
+                (cell_pci_str, BLACK, 16),
                 (_rsrp_text(sig["rsrp_dbm"]), _rsrp_color(sig["rsrp_dbm"]), 18),
                 (_sinr_text(sig["sinr_db"]), BLACK, 18),
             ]
-            key = f"{name}|{sig['serving_cell']}|{sig['rsrp_dbm']}|{sig['sinr_db']}"
+            key = f"{name}|{sig['serving_gnb']}|{sig['serving_cell_id']}|{sig['serving_pci']}|{sig['rsrp_dbm']}|{sig['sinr_db']}"
         else:
             cfg = gnb_cfg.get(name, {})
             freq = cfg.get("frequency_ghz") or (cfg.get("freq_mhz", 0) / 1000.0 if cfg.get("freq_mhz") else None)
             power = cfg.get("power_dbm")
             bw = cfg.get("bandwidth_mhz") or (cfg.get("bw_hz", 0) / 1e6 if cfg.get("bw_hz") else None)
-            pci = cfg.get("pci")
             cell_id = cfg.get("cell_id")
             rows = [
                 (name, BLACK, 24),
                 (_gnb_fp(freq, power), BLACK, 18),
                 (f"BW {bw:.0f}MHz" if bw is not None else "BW ?", BLACK, 18),
-                (f"PCI {pci}" if pci is not None else "PCI -", BLACK, 18),
-                (f"Cell {cell_id}" if cell_id is not None else "Cell -", BLACK, 18),
             ]
-            key = f"{name}|{freq}|{power}|{bw}|{pci}|{cell_id}"
+            # Multi-cell support: display PCI for each cell
+            cells = cfg.get("cells") or []
+            if cells:
+                for i, cell in enumerate(cells):
+                    pci = cell.get("pci")
+                    azimuth = cell.get("azimuth_deg")
+                    cell_label = f"Cell{i} PCI {pci}" if pci is not None else f"Cell{i} PCI -"
+                    if azimuth is not None:
+                        cell_label += f" Az{azimuth:.0f}°"
+                    rows.append((cell_label, BLACK, 16))
+            else:
+                pci = cfg.get("pci")
+                rows.append((f"PCI {pci}" if pci is not None else "PCI -", BLACK, 18))
+            if cell_id:
+                rows.append((f"Cell {cell_id}", BLACK, 18))
+            key = f"{name}|{freq}|{power}|{bw}|{cells}|{cell_id}"
 
         lbl.set_rows(rows, key)

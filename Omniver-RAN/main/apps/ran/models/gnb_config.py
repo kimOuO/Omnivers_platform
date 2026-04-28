@@ -16,6 +16,7 @@ class GnbConfig(models.Model):
     color_g = models.FloatField(default=1.0)
     color_b = models.FloatField(default=1.0)
     target_height_m = models.FloatField(null=True, blank=True)
+    cells = models.JSONField(null=True, blank=True, default=list)
     gnb_created_at = models.DateTimeField(auto_now_add=True)
     gnb_updated_at = models.DateTimeField(auto_now=True)
 

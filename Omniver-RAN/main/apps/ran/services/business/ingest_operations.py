@@ -82,14 +82,27 @@ class IngestBusinessService:
                     "sinr_db": sig["sinr_db"],
                 },
             )
-            # 3. 推 Kit（HUD 顏色編碼）
+            # 3. 推 Kit（HUD 顏色編碼 + 新 Sionna 欄位）
             try:
                 KitBusinessService.push_signal(
-                    sig["ue_name"], sig["serving_cell"], sig["rsrp_dbm"],
-                    sig["sinr_db"], sig["rsrp_map"],
+                    sig["ue_name"],
+                    sig["serving_cell"],
+                    sig["rsrp_dbm"],
+                    sig["sinr_db"],
+                    sig["rsrp_map"],
+                    serving_gnb=sig.get("serving_gnb"),
+                    serving_pci=sig.get("serving_pci"),
+                    serving_cell_id=sig.get("serving_cell_id"),
                 )
             except Exception as e:  # noqa: BLE001
                 kit_errors += 1
                 log.warning("push_signal(%s) failed: %s", sig["ue_name"], e)
+            # 4. 若 payload 包含位置，直接驅動 Kit 移動 UE（不依賴 RAN-sim 的獨立 move 呼叫）
+            if sig.get("position"):
+                pos = sig["position"]
+                try:
+                    KitBusinessService.move_ue(sig["ue_name"], pos[0], pos[1], pos[2])
+                except Exception as e:  # noqa: BLE001
+                    log.warning("move_ue(%s) failed: %s", sig["ue_name"], e)
 
         return {"accepted": len(signals), "kit_errors": kit_errors}

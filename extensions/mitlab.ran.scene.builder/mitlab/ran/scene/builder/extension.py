@@ -435,7 +435,11 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                     self._build_building(stage, b)
                 for o in config.get("obstacles", []):
                     self._build_building(stage, o)
+            print(f"[RAN] About to build {len(config['gnbs'])} gNBs, stage={stage is not None}")
+            if stage is None:
+                raise RuntimeError("Stage is None before building gNBs")
             for g in config["gnbs"]:
+                print(f"[RAN] Processing gNB: {g.get('name')}, has cells: {'cells' in g}")
                 self._build_gnb(stage, g)
 
             if (not render_only_gnb) and (not skip_ues):
@@ -457,14 +461,12 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 self._status.text = f"Done! {b_count} buildings, {o_count} obstacles, {len(config['gnbs'])} gNBs, {u_count} UEs"
             print("[RAN] Scene build complete")
 
-            if self._animated_ues:
-                self._start_animation()
-
         except Exception as e:
             self._status.text = f"Error: {e}"
             print(f"[RAN] Error: {e}")
             import traceback
-            traceback.print_exc()
+            tb_str = traceback.format_exc()
+            print(f"[RAN] Traceback:\n{tb_str}")
 
     def _build_lights(self, stage):
         """Create a distant sun light so the scene is visible."""
@@ -659,9 +661,10 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         """Teleport a UE to (x, y?, z). Keeps current Y translate if y is None.
         Does NOT touch animation waypoints — just overrides current position."""
         stage = omni.usd.get_context().get_stage()
-        prim = stage.GetPrimAtPath(f"/World/{name}")
+        prim_name = _to_prim_name(name)
+        prim = stage.GetPrimAtPath(f"/World/{prim_name}")
         if not prim.IsValid():
-            print(f"[RAN] move_ue: UE '{name}' not found")
+            print(f"[RAN] move_ue: UE '{name}' not found (prim: /World/{prim_name})")
             return
 
         # Get current Y if not specified
@@ -680,14 +683,17 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print(f"[RAN] move_ue: '{name}' → ({float(x):.1f}, {yv:.1f}, {float(z):.1f})")
 
     def push_signal(self, name, serving_cell=None, rsrp_dbm=None,
-                    sinr_db=None, rsrp_map=None):
+                    sinr_db=None, rsrp_map=None, serving_gnb=None, serving_pci=None, serving_cell_id=None):
         """Write ran:* custom attributes on a UE prim. mitlab.ran.labels reads
         these every frame to render the billboard text above the UE."""
         stage = omni.usd.get_context().get_stage()
-        prim = stage.GetPrimAtPath(f"/World/{name}")
+        prim_name = _to_prim_name(name)
+        prim = stage.GetPrimAtPath(f"/World/{prim_name}")
+        print(f"[RAN] push_signal: name={name}, prim_name={prim_name}, prim_valid={prim.IsValid()}")
         if not prim.IsValid():
-            print(f"[RAN] push_signal: UE '{name}' not found")
+            print(f"[RAN] push_signal: UE '{name}' not found (prim: /World/{prim_name})")
             return
+        print(f"[RAN] push_signal: Writing to /World/{prim_name}: cell={serving_cell}, rsrp={rsrp_dbm} dBm, sinr={sinr_db} dB")
         if serving_cell is not None:
             prim.CreateAttribute(
                 "ran:serving_cell", Sdf.ValueTypeNames.String, False
@@ -704,6 +710,28 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             prim.CreateAttribute(
                 "ran:rsrp_map", Sdf.ValueTypeNames.String, False
             ).Set(json.dumps(rsrp_map))
+        # New Sionna fields
+        if serving_gnb is not None:
+            prim.CreateAttribute(
+                "ran:serving_gnb", Sdf.ValueTypeNames.String, False
+            ).Set(str(serving_gnb))
+        if serving_pci is not None:
+            prim.CreateAttribute(
+                "ran:serving_pci", Sdf.ValueTypeNames.Int, False
+            ).Set(int(serving_pci))
+        if serving_cell_id is not None:
+            prim.CreateAttribute(
+                "ran:serving_cell_id", Sdf.ValueTypeNames.String, False
+            ).Set(str(serving_cell_id))
+        print(f"[RAN] push_signal: ✅ Attributes written to prim /World/{prim_name}")
+        # Force notice by reading back
+        try:
+            test = prim.GetAttribute("ran:rsrp_dbm")
+            if test:
+                val = test.Get()
+                print(f"[RAN] push_signal: ✓ Verified rsrp_dbm={val}")
+        except Exception as e:
+            print(f"[RAN] push_signal: Verification failed: {e}")
 
     def update_gnb(self, name, changes):
         """Apply gNB property changes sent from backend.
@@ -949,6 +977,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         name = config["name"]
         pos = config["position"]
         color = config["color"]
+        print(f"[RAN] _build_gnb called for '{name}', config keys={list(config.keys())}")
         # Visual scaling: allow per-gNB scale override, otherwise use global config.
         global_scale = float((self._config or {}).get("gnb_visual_scale") or 1.0)
         gnb_scale = float(config.get("scale") or global_scale or 1.0)
@@ -962,38 +991,55 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         container_path = f"/World/{_to_prim_name(name)}"
         UsdGeom.Xform.Define(stage, container_path)
 
-        # Triangular pyramid tower (cone with large base)
-        cone_path = f"{container_path}/Tower"
-        omni.kit.commands.execute("CreatePrimCommand",
-            prim_type="Cone", prim_path=cone_path)
-        cone = stage.GetPrimAtPath(cone_path)
-        if cone.IsValid():
-            cone_geom = UsdGeom.Cone(cone)
-            cone_geom.GetHeightAttr().Set(1.0)
-            cone_geom.GetRadiusAttr().Set(1.0)
-            # USD Cone default axis is Z, rotate so tip points up (Y)
-            cone_geom.GetAxisAttr().Set(UsdGeom.Tokens.y)
-            # Scale: wide base and tall (height from config), with optional visual scaling.
-            base_radius = 60.0 * gnb_scale
-            self._set_xform(cone,
-                translate=(pos[0], height / 2.0, pos[2]),
-                scale=(base_radius, height, base_radius))
-            UsdGeom.Gprim(cone).CreateDisplayColorPrimvar(
-                UsdGeom.Tokens.constant).Set([Gf.Vec3f(*color)])
+        # Multi-cell support: if cells array exists, build one tower+antenna per cell with azimuth rotation
+        cells = config.get("cells") or []
+        if not cells:
+            cells = [{"pci": None, "azimuth_deg": 0.0}]
 
-        # Top marker sphere (antenna)
-        ant_path = f"{container_path}/Antenna"
-        omni.kit.commands.execute("CreatePrimCommand",
-            prim_type="Sphere", prim_path=ant_path)
-        ant = stage.GetPrimAtPath(ant_path)
-        if ant.IsValid():
-            ant_radius = 24.0 * gnb_scale
-            UsdGeom.Sphere(ant).GetRadiusAttr().Set(ant_radius)
-            self._set_xform(ant, translate=(pos[0], height + ant_radius, pos[2]))
-            UsdGeom.Gprim(ant).CreateDisplayColorPrimvar(
-                UsdGeom.Tokens.constant).Set([Gf.Vec3f(1.0, 1.0, 0.0)])
+        for cell_idx, cell in enumerate(cells):
+            azimuth = float(cell.get("azimuth_deg") or 0.0)
 
-        # Radiation "waves" (drawn as concentric rings)
+            # Create a wrapper Xform for this cell (enables azimuth rotation)
+            cell_path = f"{container_path}/cell_{cell_idx}"
+            print(f"[RAN] Building cell {cell_idx} at {cell_path}, azimuth={azimuth}")
+            cell_xform = UsdGeom.Xform.Define(stage, cell_path)
+            if azimuth:
+                cell_xform.AddRotateYOp().Set(azimuth)
+
+            # Triangular pyramid tower (cone with large base)
+            cone_path = f"{cell_path}/Tower"
+            omni.kit.commands.execute("CreatePrimCommand",
+                prim_type="Cone", prim_path=cone_path)
+            cone = stage.GetPrimAtPath(cone_path)
+            print(f"[RAN] Creating cone at {cone_path}, valid={cone.IsValid()}")
+            if cone.IsValid():
+                cone_geom = UsdGeom.Cone(cone)
+                cone_geom.GetHeightAttr().Set(1.0)
+                cone_geom.GetRadiusAttr().Set(1.0)
+                # USD Cone default axis is Z, rotate so tip points up (Y)
+                cone_geom.GetAxisAttr().Set(UsdGeom.Tokens.y)
+                # Scale: wide base and tall (height from config), with optional visual scaling.
+                base_radius = 60.0 * gnb_scale
+                self._set_xform(cone,
+                    translate=(pos[0], height / 2.0, pos[2]),
+                    scale=(base_radius, height, base_radius))
+                UsdGeom.Gprim(cone).CreateDisplayColorPrimvar(
+                    UsdGeom.Tokens.constant).Set([Gf.Vec3f(*color)])
+
+            # Top marker sphere (antenna)
+            ant_path = f"{cell_path}/Antenna"
+            omni.kit.commands.execute("CreatePrimCommand",
+                prim_type="Sphere", prim_path=ant_path)
+            ant = stage.GetPrimAtPath(ant_path)
+            print(f"[RAN] Creating antenna at {ant_path}, valid={ant.IsValid()}")
+            if ant.IsValid():
+                ant_radius = 24.0 * gnb_scale
+                UsdGeom.Sphere(ant).GetRadiusAttr().Set(ant_radius)
+                self._set_xform(ant, translate=(pos[0], height + ant_radius, pos[2]))
+                UsdGeom.Gprim(ant).CreateDisplayColorPrimvar(
+                    UsdGeom.Tokens.constant).Set([Gf.Vec3f(1.0, 1.0, 0.0)])
+
+        # Radiation "waves" (drawn as concentric rings) — shared for all cells
         self._build_rru_waves(
             stage=stage,
             parent_path=container_path,
@@ -1004,7 +1050,8 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
         # Support both formats: 'frequency_ghz' (from DB) or 'freq_mhz' (from API)
         freq_ghz = config.get('frequency_ghz') or (config.get('freq_mhz', 0) / 1000.0)
-        print(f"[RAN] gNB '{name}' at {pos}, freq={freq_ghz}GHz")
+        cell_info = f", cells={len(cells)}" if cells else ""
+        print(f"[RAN] gNB '{name}' at {pos}, freq={freq_ghz}GHz{cell_info}")
 
     def _build_ue(self, stage, config):
         name = config["name"]

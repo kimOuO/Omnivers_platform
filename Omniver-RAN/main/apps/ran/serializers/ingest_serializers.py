@@ -18,26 +18,41 @@ class SignalBatchWriteSerializer(Serializer):
                 self._add_error("signals", f"[{i}] must be object")
                 continue
             ue_name = s.get("ue_name")
-            serving_cell = s.get("serving_cell")
+            # 新格式欄位（Sionna payload）
+            serving_gnb     = s.get("serving_gnb")
+            serving_pci     = s.get("serving_pci")
+            serving_cell_id = s.get("serving_cell_id")
+            # 向後相容：舊格式用 serving_cell，新格式用 serving_gnb + serving_cell_id
+            serving_cell = s.get("serving_cell") or serving_cell_id or serving_gnb
             rsrp_dbm = s.get("rsrp_dbm")
             sinr_db = s.get("sinr_db")
             rsrp_map = s.get("rsrp_map") or {}
             position = s.get("position")  # [x, y, z] or None
-            missing = [k for k, v in {"ue_name": ue_name, "serving_cell": serving_cell,
-                                       "rsrp_dbm": rsrp_dbm, "sinr_db": sinr_db}.items() if v is None]
-            if missing:
-                self._add_error("signals", f"[{i}] missing: {missing}")
+            missing = [k for k, v in {"ue_name": ue_name, "rsrp_dbm": rsrp_dbm,
+                                       "sinr_db": sinr_db}.items() if v is None]
+            if missing or serving_cell is None:
+                all_missing = missing + (["serving_cell/serving_gnb"] if serving_cell is None else [])
+                self._add_error("signals", f"[{i}] missing: {all_missing}")
                 continue
             if not isinstance(rsrp_map, dict):
                 self._add_error("signals", f"[{i}] rsrp_map must be object")
                 continue
             signal_data = {
-                "ue_name": str(ue_name),
+                "ue_name":      str(ue_name),
                 "serving_cell": str(serving_cell),
-                "rsrp_dbm": float(rsrp_dbm),
-                "sinr_db": float(sinr_db),
-                "rsrp_map": {str(k): float(v) for k, v in rsrp_map.items()},
+                "rsrp_dbm":     float(rsrp_dbm),
+                "sinr_db":      float(sinr_db),
+                "rsrp_map":     {str(k): float(v) for k, v in rsrp_map.items()},
             }
+            if serving_gnb is not None:
+                signal_data["serving_gnb"] = str(serving_gnb)
+            if serving_pci is not None:
+                try:
+                    signal_data["serving_pci"] = int(serving_pci)
+                except (TypeError, ValueError):
+                    pass
+            if serving_cell_id is not None:
+                signal_data["serving_cell_id"] = str(serving_cell_id)
             # 加入位置（可選）
             if position is not None:
                 if isinstance(position, list) and len(position) == 3:

@@ -35,6 +35,7 @@ class GnbReadSerializer(Serializer):
                 "power_dbm": float(instance.power_dbm or 0),
                 "bandwidth_mhz": float((instance.bw_hz or 0) / 1_000_000.0),
                 "active": bool(instance.active),
+                "cells": instance.cells or [],
                 "created_at": instance.gnb_created_at.isoformat() if instance.gnb_created_at else None,
                 "updated_at": instance.gnb_updated_at.isoformat() if instance.gnb_updated_at else None,
             }
@@ -54,6 +55,7 @@ class GnbReadSerializer(Serializer):
                 "power_dbm": float(instance.get("power_dbm") or 0),
                 "bandwidth_mhz": float((bw_hz or 0) / 1_000_000.0),
                 "active": bool(instance.get("active", True)),
+                "cells": instance.get("cells") or [],
             }
 
         return {}
@@ -83,6 +85,7 @@ class GnbWriteSerializer(Serializer):
             "bw_hz": float(bw_mhz * 1_000_000.0) if bw_mhz else 100_000_000.0,
             "power_dbm": float(power_dbm) if power_dbm else 43,
             "active": data.get("active", True),
+            "cells": data.get("cells") or [],
         }
 
 
@@ -136,5 +139,9 @@ class GnbStateWriteSerializer(Serializer):
         # Height for antenna placement
         if "target_height_m" in data and data["target_height_m"] is not None:
             result["target_height_m"] = float(data["target_height_m"])
+
+        # Cells array (multiple sectors with pci + azimuth)
+        if "cells" in data:
+            result["cells"] = data["cells"] or []
 
         return result

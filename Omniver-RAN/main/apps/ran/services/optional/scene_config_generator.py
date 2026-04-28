@@ -69,6 +69,8 @@ class SceneConfigGeneratorService:
             }
             if g.target_height_m is not None:
                 gnb_entry["target_height_m"] = g.target_height_m
+            if g.cells is not None:
+                gnb_entry["cells"] = g.cells
             config["gnbs"].append(gnb_entry)
 
         # UEs — no scene_id field, always fetch all

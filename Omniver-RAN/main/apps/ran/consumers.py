@@ -37,3 +37,49 @@ class UELiveConsumer(AsyncJsonWebsocketConsumer):
     async def live_snapshot(self, event: dict) -> None:
         """Consumer handler for group_send(type='live.snapshot', ...)."""
         await self.send_json(event["payload"])
+
+
+class IngestConsumer(AsyncJsonWebsocketConsumer):
+    """WebSocket server at /api/v0.1/RAN/Ingest/ws/
+
+    Receives WS connections from RAN-sim and processes signal ingest payloads:
+    {
+      "ts": "2024-...",
+      "session_uuid": "...",
+      "signals": [
+        {"ue_name": "...", "serving_gnb": "...", "serving_pci": 100,
+         "serving_cell_id": "...", "rsrp_dbm": ..., "sinr_db": ...,
+         "rsrp_map": {...}, "position": [x, y, z]},
+        ...
+      ]
+    }
+    """
+
+    async def connect(self) -> None:
+        await self.accept()
+        log.info("[ingest_ws] WS connection accepted")
+
+    async def disconnect(self, code: int) -> None:
+        log.info("[ingest_ws] WS disconnected code=%s", code)
+
+    async def receive_json(self, content: dict) -> None:
+        """Receive and process ingest payload from RAN-sim."""
+        from main.apps.ran.serializers.ingest_serializers import SignalBatchWriteSerializer
+        from main.apps.ran.services.business.ingest_operations import IngestBusinessService
+        from asgiref.sync import sync_to_async
+
+        try:
+            ser = SignalBatchWriteSerializer(data=content)
+            if not ser.is_valid():
+                log.warning("[ingest_ws] validation failed: %s", ser.errors)
+                await self.send_json({"error": ser.errors})
+                return
+
+            data = ser.validated_data
+            result = await sync_to_async(IngestBusinessService.ingest_signals)(
+                data["signals"], ts=data.get("ts"), session_uuid=data.get("session_uuid")
+            )
+            await self.send_json({"accepted": result["accepted"], "kit_errors": result["kit_errors"]})
+        except Exception as e:  # noqa: BLE001
+            log.exception("[ingest_ws] error processing payload")
+            await self.send_json({"error": str(e)})
