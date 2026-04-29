@@ -120,6 +120,9 @@ class PlaybackController:
                 frames_dict[ts][signal.ue_name] = {
                     "name": signal.ue_name,
                     "serving_cell": signal.serving_cell,
+                    "serving_gnb": signal.serving_gnb,
+                    "serving_pci": signal.serving_pci,
+                    "serving_cell_id": signal.serving_cell_id,
                     "rsrp_dbm": signal.rsrp_dbm,
                     "sinr_db": signal.sinr_db,
                 }

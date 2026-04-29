@@ -193,6 +193,9 @@ class UEController:
                         KitBusinessService.push_signal(
                             name,
                             serving_cell=ue.get("serving_cell"),
+                            serving_gnb=ue.get("serving_gnb"),
+                            serving_pci=ue.get("serving_pci"),
+                            serving_cell_id=ue.get("serving_cell_id"),
                             rsrp_dbm=float(rsrp) if rsrp is not None else None,
                             sinr_db=float(sinr) if sinr is not None else None,
                             rsrp_map={},
