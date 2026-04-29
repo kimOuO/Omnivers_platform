@@ -160,7 +160,7 @@ class _LabelWidget:
 
     def __init__(self, container, is_ue: bool):
         self.is_ue = is_ue
-        n_rows = 5   # UE: name, gNB, Cell/PCI, RSRP, SINR; gNB: name, freq/power, BW, PCI, cell
+        n_rows = 8   # UE: name, gNB, Cell/PCI, RSRP, SINR; gNB: name, freq/power, BW + up to 5 cells
         bg = BG_DARK if is_ue else BG_LIGHT
         with container:
             self.placer = ui.Placer(offset_x=0, offset_y=0, draggable=False)
@@ -527,10 +527,16 @@ class RANLabelsExtension(omni.ext.IExt):
             scale = float(cfg.get("scale") or 1.0)
             x = float(pos[0])
             z = float(pos[2])
-            # gNB "height" in scene.builder = config.position[1] * scale;
-            # antenna sits at top. Put label a bit above the antenna sphere.
-            tower_height = float(pos[1]) * scale
-            ant_radius = 6.0 * scale
+            # Match scene.builder._build_gnb / update_gnb geometry so the HUD
+            # label sits on top of the antenna sphere instead of inside the tower:
+            #   tower height = target_height_m if set, else pos[1] * scale * 4.0
+            #   antenna sphere radius = 24.0 * scale
+            target_h = cfg.get("target_height_m")
+            if target_h is not None:
+                tower_height = float(target_h)
+            else:
+                tower_height = float(pos[1]) * scale * 4.0
+            ant_radius = 24.0 * scale
             y = tower_height + 2 * ant_radius
             offset = GNB_OFFSET_Y
         world_pos = Gf.Vec3d(x, y + offset, z)
