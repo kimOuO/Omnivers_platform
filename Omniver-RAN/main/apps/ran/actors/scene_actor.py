@@ -80,6 +80,24 @@ class SceneController:
         if not config:
             return error_response("Missing config", {}, 400)
 
+        for building in config.get("buildings", []):
+            if "usd_path" in building and "usd" not in building:
+                usd_path = building.pop("usd_path")
+                if usd_path:
+                    building["usd"] = usd_path
+
+        for gnb in config.get("gnbs", []):
+            if "color" not in gnb:
+                gnb["color"] = [1.0, 1.0, 1.0]
+
+        for ue in config.get("ues", []):
+            if "color" not in ue:
+                ue["color"] = [0.5, 0.5, 0.5]
+            if "usd_path" in ue and "usd" not in ue:
+                usd_path = ue.pop("usd_path")
+                if usd_path:
+                    ue["usd"] = usd_path
+
         try:
             KitBusinessService.push_scene_config(config)
             KitBusinessService.build_scene()

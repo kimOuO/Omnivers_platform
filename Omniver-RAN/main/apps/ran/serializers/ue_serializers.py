@@ -19,14 +19,18 @@ class UeReadSerializer(Serializer):
     def to_representation(cls, instance: Any) -> dict[str, Any]:
         # Handle UeConfig ORM object (from database)
         if isinstance(instance, UeConfig):
-            return {
+            result = {
                 "name": instance.name,
                 "position": [float(instance.pos_x or 0), float(instance.pos_y or 0), float(instance.pos_z or 0)],
+                "color": [float(instance.color_r), float(instance.color_g), float(instance.color_b)],
                 "waypoints": instance.waypoints_json,
                 "speed_mps": float(instance.speed_mps or 1.0),
                 "loop": bool(instance.loop),
                 "target_height_m": instance.target_height_m,
             }
+            if instance.usd_path:
+                result["usd_path"] = instance.usd_path
+            return result
 
         # Handle UeState
         if isinstance(instance, UeState):
