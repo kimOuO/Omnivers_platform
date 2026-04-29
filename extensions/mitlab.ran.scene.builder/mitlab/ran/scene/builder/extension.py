@@ -770,22 +770,37 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 px, py, pz = float(new_pos[0]), float(new_pos[1]), float(new_pos[2])
             target["position"] = [px, py, pz]
 
-            # --- Reposition Tower + Antenna USD prims ---
+            # --- Reposition Tower + Antenna USD prims for ALL cells ---
             stage = omni.usd.get_context().get_stage()
-            scale = float(target.get("scale") or 1.0)
-            height = py * scale
-            ant_radius = 6.0 * scale
+            gnb_scale = float(target.get("scale") or 1.0)
 
-            tower = stage.GetPrimAtPath(f"/World/{name}/Tower")
-            if tower.IsValid():
-                self._set_xform(
-                    tower,
-                    translate=(px, height / 2.0, pz),
-                    scale=(15.0 * scale, height, 15.0 * scale),
-                )
-            ant = stage.GetPrimAtPath(f"/World/{name}/Antenna")
-            if ant.IsValid():
-                self._set_xform(ant, translate=(px, height + ant_radius, pz))
+            target_h = target.get("target_height_m")
+            if target_h is not None:
+                height = float(target_h)
+            else:
+                height = py * gnb_scale * 4.0
+
+            base_radius = 60.0 * gnb_scale
+            ant_radius = 24.0 * gnb_scale
+
+            gnb_container = stage.GetPrimAtPath(f"/World/{name}")
+            if gnb_container.IsValid():
+                for cell_prim in gnb_container.GetChildren():
+                    if not cell_prim.GetName().startswith("cell_"):
+                        continue
+                    cell_path = cell_prim.GetPath()
+
+                    tower = stage.GetPrimAtPath(f"{cell_path}/Tower")
+                    if tower.IsValid():
+                        self._set_xform(
+                            tower,
+                            translate=(px, height / 2.0, pz),
+                            scale=(base_radius, height, base_radius),
+                        )
+
+                    ant = stage.GetPrimAtPath(f"{cell_path}/Antenna")
+                    if ant.IsValid():
+                        self._set_xform(ant, translate=(px, height + ant_radius, pz))
 
         # Force a Usd.Notice to fire so HUD label refreshes (needed for
         # non-positional changes — mutating _config alone doesn't touch USD).
