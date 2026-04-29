@@ -68,6 +68,26 @@ class SceneController:
             return error_response("Kit unreachable", {"detail": str(e)}, 502)
         return success_response({"action": "clear"}, "queued")
 
+    @staticmethod
+    @actor
+    def push_snapshot_to_kit(request):  # noqa: ARG004
+        """Push scene snapshot config directly to Kit without modifying DB (for Playback)."""
+        data, error = parse_body(request)
+        if error:
+            return error
+
+        config = data.get("config")
+        if not config:
+            return error_response("Missing config", {}, 400)
+
+        try:
+            KitBusinessService.push_scene_config(config)
+            KitBusinessService.build_scene()
+        except Exception as e:  # noqa: BLE001
+            log.error("push_snapshot_to_kit failed: %s", e)
+            return error_response("Kit unreachable", {"detail": str(e)}, 502)
+        return success_response({"action": "push_snapshot"}, "queued")
+
 
 class AnimationController:
     @staticmethod

@@ -32,6 +32,7 @@ urlpatterns = [
     path("RAN/Scene/SceneLayoutReader/read", SceneLayoutReader.read, name="scene_layout_read"),
     path("RAN/Scene/SceneController/build", SceneController.build, name="scene_build"),
     path("RAN/Scene/SceneController/clear", SceneController.clear, name="scene_clear"),
+    path("RAN/Scene/SceneController/push_snapshot_to_kit", SceneController.push_snapshot_to_kit, name="scene_push_snapshot"),
     path("RAN/Scene/AnimationController/start", AnimationController.start, name="anim_start"),
     path("RAN/Scene/AnimationController/stop", AnimationController.stop, name="anim_stop"),
     path("RAN/Scene/BuildingController/create", BuildingController.create, name="building_create"),
