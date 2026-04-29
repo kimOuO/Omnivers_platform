@@ -53,6 +53,7 @@ class PlaybackController:
                         "ended_at": session.ended_at.isoformat() if session.ended_at else None,
                         "duration_ms": duration_ms,
                         "frame_count": frame_count,
+                        "scene_snapshot": session.metadata_json.get("scene_snapshot", {}),
                     }
                 )
 
