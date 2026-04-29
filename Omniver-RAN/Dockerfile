@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements/production.txt
 
 COPY . .
 
+# Make entrypoint script executable
+RUN chmod +x entrypoint.sh
+
 EXPOSE 8000
 
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "main.asgi:application"]
+ENTRYPOINT ["/app/entrypoint.sh"]

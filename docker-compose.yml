@@ -50,17 +50,13 @@ services:
       HTTP_KIT_PORT: "8080"
       WS_KIT_PORT: "8081"                   # Kit's WS snapshot push port
       LOG_LEVEL: INFO
+      BACKEND_HOST: "0.0.0.0"               # Backend listening address
+      BACKEND_PORT: "8000"                  # Backend listening port
     depends_on:
       postgres:
         condition: service_healthy
       kit:
         condition: service_started
-    # Dev mode: migrate then start Daphne (ASGI) so HTTP + WebSocket both work.
-    # Daphne is also in INSTALLED_APPS first, so `manage.py runserver` would
-    # auto-detect ASGI — but we use daphne directly for production parity.
-    command: >
-      sh -c "python manage.py migrate &&
-             daphne -b 0.0.0.0 -p 8000 main.asgi:application"
     volumes:
       - ./Omniver-RAN:/app                   # live code reload
     restart: unless-stopped
