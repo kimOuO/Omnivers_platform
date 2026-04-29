@@ -160,9 +160,10 @@ class UEController:
     @staticmethod
     @actor
     def batch_move(request):
-        """批次移動多個 UE（用於 Playback 3D 重播）。
+        """批次移動多個 UE 並更新信號（用於 Playback 3D 重播）。
 
-        Body: { "ues": [{"name": "ue1", "x": 10.0, "y": 0.0, "z": 5.0}, ...] }
+        Body: { "ues": [{"name": "ue1", "x": 10.0, "y": 0.0, "z": 5.0,
+                         "rsrp_dbm": -80.0, "sinr_db": 15.0, "serving_cell": "cell_1"}, ...] }
         """
         data, err = parse_body(request)
         if err is not None:
@@ -184,6 +185,20 @@ class UEController:
                     float(ue.get("y", 0.0)),
                     float(ue.get("z", 0.0)),
                 )
+                # Push signal data if provided (for UE label update)
+                rsrp = ue.get("rsrp_dbm")
+                sinr = ue.get("sinr_db")
+                if rsrp is not None or sinr is not None:
+                    try:
+                        KitBusinessService.push_signal(
+                            name,
+                            serving_cell=ue.get("serving_cell"),
+                            rsrp_dbm=float(rsrp) if rsrp is not None else None,
+                            sinr_db=float(sinr) if sinr is not None else None,
+                            rsrp_map={},
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("batch_move: push_signal failed for %s: %s", name, e)
                 moved.append(name)
             except Exception as e:  # noqa: BLE001
                 log.warning("batch_move: Kit move failed for %s: %s", name, e)
