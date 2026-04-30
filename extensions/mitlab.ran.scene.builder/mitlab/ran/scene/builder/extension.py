@@ -770,7 +770,9 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 px, py, pz = float(new_pos[0]), float(new_pos[1]), float(new_pos[2])
             target["position"] = [px, py, pz]
 
-            # --- Reposition Tower + Antenna USD prims for ALL cells ---
+            # --- Reposition gNB ---
+            # Container holds the world XZ position; Tower/Antenna inside cells use local coords.
+            # Moving the gNB only requires updating the container's translate.
             stage = omni.usd.get_context().get_stage()
             gnb_scale = float(target.get("scale") or 1.0)
 
@@ -785,6 +787,10 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
             gnb_container = stage.GetPrimAtPath(f"/World/{name}")
             if gnb_container.IsValid():
+                # Move the whole gNB by translating the container.
+                self._set_xform(gnb_container, translate=(px, 0.0, pz))
+
+                # Refresh height-dependent prims inside each cell (local coords, only Y).
                 for cell_prim in gnb_container.GetChildren():
                     if not cell_prim.GetName().startswith("cell_"):
                         continue
@@ -794,13 +800,13 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                     if tower.IsValid():
                         self._set_xform(
                             tower,
-                            translate=(px, height / 2.0, pz),
+                            translate=(0.0, height / 2.0, 0.0),
                             scale=(base_radius, height, base_radius),
                         )
 
                     ant = stage.GetPrimAtPath(f"{cell_path}/Antenna")
                     if ant.IsValid():
-                        self._set_xform(ant, translate=(px, height + ant_radius, pz))
+                        self._set_xform(ant, translate=(0.0, height + ant_radius, 0.0))
 
         # Force a Usd.Notice to fire so HUD label refreshes (needed for
         # non-positional changes — mutating _config alone doesn't touch USD).
@@ -943,17 +949,34 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             asset_path = f"{container_path}/Asset"
             asset_prim = self._add_reference(stage, asset_path, building_usd)
             if asset_prim is not None and asset_prim.IsValid():
-                # Apply scale BEFORE rotation to ensure target_height_m is calculated on unrotated geometry
+                # Apply scale BEFORE rotation to ensure dimensions are calculated on unrotated geometry.
+                # Priority: explicit scale > size (per-axis world dims) > target_height_m.
                 scale = config.get("scale")
+                size_cfg = config.get("size")
+                target_h = config.get("target_height_m")
+
                 if scale and len(scale) == 3:
                     self._set_xform(
                         asset_prim,
                         scale=(float(scale[0]), float(scale[1]), float(scale[2])),
                     )
-                else:
-                    target_h = config.get("target_height_m")
-                    if target_h is not None:
-                        self._scale_prim_to_target_height(stage, asset_prim, target_height_m=float(target_h))
+                elif size_cfg and len(size_cfg) == 3 and any(float(s) > 0 for s in size_cfg):
+                    try:
+                        world_bound = self._compute_world_bbox(stage, asset_prim)
+                        bbox = world_bound.ComputeAlignedRange()
+                        bsize = [float(bbox.GetSize()[i]) for i in range(3)]
+                        scale_xyz = tuple(
+                            float(size_cfg[i]) / bsize[i] if bsize[i] > 1e-6 else 1.0
+                            for i in range(3)
+                        )
+                        self._set_xform(asset_prim, scale=scale_xyz)
+                        print(f"[RAN] Building '{name}' scaled by size: bbox={bsize} → scale={scale_xyz}")
+                    except Exception as e:
+                        print(f"[RAN] size→scale failed for '{name}', falling back to target_height_m: {e}")
+                        if target_h is not None:
+                            self._scale_prim_to_target_height(stage, asset_prim, target_height_m=float(target_h))
+                elif target_h is not None:
+                    self._scale_prim_to_target_height(stage, asset_prim, target_height_m=float(target_h))
 
                 # Apply rotation AFTER scaling so height calculation is correct
                 rot = config.get("rotation_xyz_deg")
@@ -1004,12 +1027,18 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             height = float(pos[1]) * gnb_scale * 4.0
 
         container_path = f"/World/{_to_prim_name(name)}"
-        UsdGeom.Xform.Define(stage, container_path)
+        container = UsdGeom.Xform.Define(stage, container_path)
+        # Place gNB world position on the container; cells/towers/antennas use local coords.
+        # This way each cell's azimuth rotation only changes orientation, not world XZ position.
+        self._set_xform(container.GetPrim(), translate=(float(pos[0]), 0.0, float(pos[2])))
 
         # Multi-cell support: if cells array exists, build one tower+antenna per cell with azimuth rotation
         cells = config.get("cells") or []
         if not cells:
             cells = [{"pci": None, "azimuth_deg": 0.0}]
+
+        ant_radius = 24.0 * gnb_scale
+        base_radius = 60.0 * gnb_scale
 
         for cell_idx, cell in enumerate(cells):
             azimuth = float(cell.get("azimuth_deg") or 0.0)
@@ -1034,9 +1063,9 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 # USD Cone default axis is Z, rotate so tip points up (Y)
                 cone_geom.GetAxisAttr().Set(UsdGeom.Tokens.y)
                 # Scale: wide base and tall (height from config), with optional visual scaling.
-                base_radius = 60.0 * gnb_scale
+                # Translate is local (only Y); the container holds the gNB world position.
                 self._set_xform(cone,
-                    translate=(pos[0], height / 2.0, pos[2]),
+                    translate=(0.0, height / 2.0, 0.0),
                     scale=(base_radius, height, base_radius))
                 UsdGeom.Gprim(cone).CreateDisplayColorPrimvar(
                     UsdGeom.Tokens.constant).Set([Gf.Vec3f(*color)])
@@ -1048,17 +1077,17 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             ant = stage.GetPrimAtPath(ant_path)
             print(f"[RAN] Creating antenna at {ant_path}, valid={ant.IsValid()}")
             if ant.IsValid():
-                ant_radius = 24.0 * gnb_scale
                 UsdGeom.Sphere(ant).GetRadiusAttr().Set(ant_radius)
-                self._set_xform(ant, translate=(pos[0], height + ant_radius, pos[2]))
+                self._set_xform(ant, translate=(0.0, height + ant_radius, 0.0))
                 UsdGeom.Gprim(ant).CreateDisplayColorPrimvar(
                     UsdGeom.Tokens.constant).Set([Gf.Vec3f(1.0, 1.0, 0.0)])
 
-        # Radiation "waves" (drawn as concentric rings) — shared for all cells
+        # Radiation "waves" (drawn as concentric rings) — shared for all cells.
+        # Center is local (container already holds world position).
         self._build_rru_waves(
             stage=stage,
             parent_path=container_path,
-            center=(float(pos[0]), float(height + (24.0 * gnb_scale)), float(pos[2])),
+            center=(0.0, float(height + ant_radius), 0.0),
             color=(1.0, 0.9, 0.2),
             scale=gnb_scale,
         )
