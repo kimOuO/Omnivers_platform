@@ -559,11 +559,11 @@ class RANLabelsExtension(omni.ext.IExt):
             gnb_str = sig["serving_gnb"] or "-"
             cell_pci_str = f"Cell {sig['serving_cell_id']} PCI {sig['serving_pci']}" if sig['serving_cell_id'] else "-"
             rows = [
-                (name, BLACK, 24),
-                (gnb_str, BLACK, 18),
-                (cell_pci_str, BLACK, 16),
-                (_rsrp_text(sig["rsrp_dbm"]), _rsrp_color(sig["rsrp_dbm"]), 18),
-                (_sinr_text(sig["sinr_db"]), BLACK, 18),
+                (name, BLACK, 14),
+                (gnb_str, BLACK, 11),
+                (cell_pci_str, BLACK, 10),
+                (_rsrp_text(sig["rsrp_dbm"]), _rsrp_color(sig["rsrp_dbm"]), 11),
+                (_sinr_text(sig["sinr_db"]), BLACK, 11),
             ]
             key = f"{name}|{sig['serving_gnb']}|{sig['serving_cell_id']}|{sig['serving_pci']}|{sig['rsrp_dbm']}|{sig['sinr_db']}"
         else:
@@ -573,9 +573,9 @@ class RANLabelsExtension(omni.ext.IExt):
             bw = cfg.get("bandwidth_mhz") or (cfg.get("bw_hz", 0) / 1e6 if cfg.get("bw_hz") else None)
             cell_id = cfg.get("cell_id")
             rows = [
-                (name, BLACK, 24),
-                (_gnb_fp(freq, power), BLACK, 18),
-                (f"BW {bw:.0f}MHz" if bw is not None else "BW ?", BLACK, 18),
+                (name, BLACK, 14),
+                (_gnb_fp(freq, power), BLACK, 11),
+                (f"BW {bw:.0f}MHz" if bw is not None else "BW ?", BLACK, 11),
             ]
             # Multi-cell support: display PCI for each cell
             cells = cfg.get("cells") or []
@@ -586,12 +586,12 @@ class RANLabelsExtension(omni.ext.IExt):
                     cell_label = f"Cell{i} PCI {pci}" if pci is not None else f"Cell{i} PCI -"
                     if azimuth is not None:
                         cell_label += f" Az{azimuth:.0f}°"
-                    rows.append((cell_label, BLACK, 16))
+                    rows.append((cell_label, BLACK, 10))
             else:
                 pci = cfg.get("pci")
-                rows.append((f"PCI {pci}" if pci is not None else "PCI -", BLACK, 18))
+                rows.append((f"PCI {pci}" if pci is not None else "PCI -", BLACK, 11))
             if cell_id:
-                rows.append((f"Cell {cell_id}", BLACK, 18))
+                rows.append((f"Cell {cell_id}", BLACK, 11))
             key = f"{name}|{freq}|{power}|{bw}|{cells}|{cell_id}"
 
         lbl.set_rows(rows, key)
