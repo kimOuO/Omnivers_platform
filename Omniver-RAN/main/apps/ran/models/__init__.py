@@ -10,6 +10,8 @@ from main.apps.ran.models.simulation_session import SimulationSession
 from main.apps.ran.models.building_object import BuildingObject
 from main.apps.ran.models.obstacle_object import ObstacleObject
 from main.apps.ran.models.usd_asset import UsdAsset
+from main.apps.ran.models.handover_history import HandoverHistory
+from main.apps.ran.models.control_action import ControlAction
 
 __all__ = [
     "SceneSnapshot",
@@ -24,4 +26,6 @@ __all__ = [
     "BuildingObject",
     "ObstacleObject",
     "UsdAsset",
+    "HandoverHistory",
+    "ControlAction",
 ]

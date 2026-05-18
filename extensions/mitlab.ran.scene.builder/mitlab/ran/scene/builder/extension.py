@@ -630,9 +630,17 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
     def update_trajectory(self, name, waypoints, speed_mps=None, loop=True):
         """Replace waypoints for a UE at runtime. Upserts into _animated_ues
-        and auto-starts the animation subscription if not already running.
+        only — does NOT auto-start the animation subscription.
+
+        Animation lifecycle is now explicit: only `/animation/start` arms the
+        update loop. Previously this method auto-called `_start_animation()`,
+        which silently re-armed the animation after a Stop Sim (since this
+        endpoint is hit by Build Scene / DrawPage on each waypoint save),
+        producing "ghost UE" motion in Kit viewport. Dashboard-driven mode
+        wants Kit passive — positions arrive via `move_ue` ingest, not USD
+        animation — so we honour that by separating data upsert from start.
         Safe to call from the update loop (thread context of api command queue)."""
-        prim_path = f"/World/{name}"
+        prim_path = f"/World/{_to_prim_name(name)}"
         wps = [[float(c) for c in wp] for wp in (waypoints or [])]
         for ue in self._animated_ues:
             if ue["prim_path"] == prim_path:
@@ -654,8 +662,8 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 "direction": 1,
                 "loop": bool(loop),
             })
-        self._start_animation()
-        print(f"[RAN] Trajectory updated for {name}: {len(wps)} waypoints")
+        print(f"[RAN] Trajectory updated for {name}: {len(wps)} waypoints "
+              f"(animation NOT auto-started; call /animation/start to arm)")
 
     def move_ue(self, name, x, z, y=None):
         """Teleport a UE to (x, y?, z). Keeps current Y translate if y is None.
@@ -820,13 +828,30 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print(f"[RAN] update_gnb: {name} applied {list(changes.keys())}")
 
     def _stop_animation(self):
+        # carb event stream 內部仍持有 subscription 的 strong ref，僅把 Python ref
+        # 設 None 不保證取消註冊；必須顯式 unsubscribe() 才會把 callback 從 stream
+        # 的內部 list 移除，避免 _on_animation_update 在停下後繼續被觸發。
         if self._animation_sub is not None:
+            try:
+                self._animation_sub.unsubscribe()
+            except Exception:
+                pass
             self._animation_sub = None
         self._animating = False
+        # 清掉每個 UE 的位移追蹤，避免下次 start 從中段 resume / 用到過期的 _path_len cache
+        for ue in self._animated_ues:
+            ue["dist"] = 0.0
+            ue["direction"] = 1
+            ue["_path_len"] = None
+            ue["_seg_cum"] = None
         self._status.text = "Animation stopped"
         print("[RAN] Animation stopped")
 
     def _on_animation_update(self, event):
+        # Defense in depth：subscription 取消理應停止 callback，但若 stream 在某幀
+        # dispatch 過程中仍持有 ref（race window），此 guard 確保已 stop 後一律 no-op。
+        if not self._animating:
+            return
         dt = float(event.payload.get("dt", 0.016))
         stage = omni.usd.get_context().get_stage()
 
@@ -890,7 +915,16 @@ class RANSceneBuilderExtension(omni.ext.IExt):
 
             prim = stage.GetPrimAtPath(ue["prim_path"])
             if prim.IsValid():
-                self._set_xform(prim, translate=pos)
+                # Preserve current y (set by _align_prim_to_ground_y at build time)
+                # so animation doesn't overwrite the ground-alignment delta.
+                current_y = float(pos[1])
+                for op in UsdGeom.Xformable(prim).GetOrderedXformOps():
+                    if op.GetOpName() == "xformOp:translate":
+                        t_val = op.Get()
+                        if t_val is not None:
+                            current_y = float(t_val[1])
+                        break
+                self._set_xform(prim, translate=(pos[0], current_y, pos[2]))
 
     def _clear_scene(self):
         self._stop_animation()
@@ -1151,7 +1185,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             body_geom.GetAxisAttr().Set(UsdGeom.Tokens.y)
             self._set_xform(
                 body,
-                translate=(pos[0], body_height / 2.0, pos[2]),
+                translate=(0.0, body_height / 2.0, 0.0),
                 scale=(body_radius, body_height, body_radius),
             )
             UsdGeom.Gprim(body).CreateDisplayColorPrimvar(
@@ -1162,7 +1196,7 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         head = stage.GetPrimAtPath(head_path)
         if head.IsValid():
             UsdGeom.Sphere(head).GetRadiusAttr().Set(head_radius)
-            self._set_xform(head, translate=(pos[0], body_height + head_radius, pos[2]))
+            self._set_xform(head, translate=(0.0, body_height + head_radius, 0.0))
             UsdGeom.Gprim(head).CreateDisplayColorPrimvar(
                 UsdGeom.Tokens.constant).Set([Gf.Vec3f(1.0, 0.9, 0.7)])
 

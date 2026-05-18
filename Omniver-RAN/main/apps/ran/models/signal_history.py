@@ -13,6 +13,13 @@ class SignalHistory(models.Model):
     rsrp_dbm = models.FloatField()
     sinr_db = models.FloatField()
     rsrp_map_json = models.JSONField(default=dict)
+    # 2026-05-17 #2: KPM 補完 wireless KPI,讓 playback 能重現 throughput/PRB/MCS.
+    # 來源:CU `kpm_reporter.collect().ue_status[]`,由 Dashboard / RAN-sim 在 ingest 時帶上。
+    throughput_dl_mbps = models.FloatField(null=True, blank=True)
+    throughput_ul_mbps = models.FloatField(null=True, blank=True)
+    mcs_dl = models.IntegerField(null=True, blank=True)
+    prb_used_dl = models.IntegerField(null=True, blank=True)
+    mimo_rank = models.IntegerField(null=True, blank=True)
     signal_ts = models.DateTimeField(db_index=True)
 
     class Meta:

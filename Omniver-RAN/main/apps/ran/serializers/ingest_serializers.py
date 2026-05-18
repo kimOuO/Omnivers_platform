@@ -53,6 +53,21 @@ class SignalBatchWriteSerializer(Serializer):
                     pass
             if serving_cell_id is not None:
                 signal_data["serving_cell_id"] = str(serving_cell_id)
+            # 2026-05-17 #2: KPM 補完 wireless KPI (throughput/MCS/PRB/rank).
+            # 由 Dashboard / RAN-sim 在 ingest 時帶上,讓 playback 能重現。
+            for k, caster in (
+                ("throughput_dl_mbps", float),
+                ("throughput_ul_mbps", float),
+                ("mcs_dl", int),
+                ("prb_used_dl", int),
+                ("mimo_rank", int),
+            ):
+                v = s.get(k)
+                if v is not None:
+                    try:
+                        signal_data[k] = caster(v)
+                    except (TypeError, ValueError):
+                        pass
             # 加入位置（可選）
             if position is not None:
                 if isinstance(position, list) and len(position) == 3:

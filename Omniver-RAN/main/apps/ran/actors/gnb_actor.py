@@ -93,10 +93,10 @@ class GNBController:
             return error_response(f"gNB '{name}' not found", status=404)
 
         s = GnbStateWriteSerializer(data=data)
-        # 更新時只允許修改 USD 規範的屬性（position, power_dbm, frequency_ghz, bandwidth_mhz, active, color, target_height_m）
+        # 更新時只允許修改 USD 規範的屬性（position, power_dbm, frequency_ghz, bandwidth_mhz, active, color, target_height_m, cells）
         v = s._validate_update(data)
         if not v:
-            return error_response("No editable USD fields provided (allowed: position, power_dbm, frequency_ghz, bandwidth_mhz, active, color, target_height_m)", status=400)
+            return error_response("No editable USD fields provided (allowed: position, power_dbm, frequency_ghz, bandwidth_mhz, active, color, target_height_m, cells)", status=400)
 
         # ---- DB updates (canonical values for ranp-sim etc.) ----
         updates: dict = {"gnb_updated_at": TimestampService.get_current_timestamp()}
@@ -120,6 +120,12 @@ class GNBController:
             updates["color_b"] = v["color_b"]
         if v.get("target_height_m") is not None:
             updates["target_height_m"] = v["target_height_m"]
+        # AK9: cells (per-sector pci + azimuth_deg) — Dashboard 透過 inspector panel
+        # 改 sector 方向時，serializer 把這個 array 帶下來，過去 actor 漏寫進 DB
+        # 導致前端按 Update 看起來「沒反應」。現在連 JSONField 一起寫入，並讓下游
+        # ranp-sim push 拿到最新值。
+        if v.get("cells") is not None:
+            updates["cells"] = v["cells"]
         SqlDbBusinessService.update_entity(cfg, updates)
 
         # ---- Kit forward (reflect in viewport + HUD label) ----

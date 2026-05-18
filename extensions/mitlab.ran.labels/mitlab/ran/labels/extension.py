@@ -384,14 +384,27 @@ class RANLabelsExtension(omni.ext.IExt):
 
             mvp = view * proj
 
-            # Resolution: try a few attribute conventions
-            res = _first_attr(vp, "resolution")
+            # Pixel size MUST match the frame widget that hosts the Placers,
+            # NOT the render resolution. With docked panels / DPI scaling the
+            # viewport widget is smaller than the render target, and using
+            # render-res would shift labels sideways (proportional to NDC.x).
             w = h = None
-            if res is not None:
+            if self._frame is not None:
                 try:
-                    w, h = float(res[0]), float(res[1])
+                    cw = float(self._frame.computed_content_width)
+                    ch = float(self._frame.computed_content_height)
+                    if cw > 0 and ch > 0:
+                        w, h = cw, ch
                 except Exception:  # noqa: BLE001
-                    w = h = None
+                    pass
+            # Fallback: render resolution (matches widget when viewport is undocked / fullscreen).
+            if w is None or h is None:
+                res = _first_attr(vp, "resolution")
+                if res is not None:
+                    try:
+                        w, h = float(res[0]), float(res[1])
+                    except Exception:  # noqa: BLE001
+                        w = h = None
             if (w is None or h is None) and hasattr(vp, "full_viewport_frame"):
                 fr = vp.full_viewport_frame
                 try:

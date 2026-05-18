@@ -4,7 +4,13 @@ from __future__ import annotations
 from datetime import datetime
 
 from main.apps.ran.actors._http import actor, parse_body
-from main.apps.ran.models import SimulationSession, SignalHistory, PositionHistory
+from main.apps.ran.models import (
+    ControlAction,
+    HandoverHistory,
+    PositionHistory,
+    SignalHistory,
+    SimulationSession,
+)
 from main.utils.logger import get_logger
 from main.utils.response import error_response, success_response
 
@@ -60,9 +66,11 @@ class SimSessionController:
             if sessions.count() > 10:
                 oldest = sessions.first()
                 log.info("Deleting oldest session %s to keep max 10", oldest.session_uuid)
-                # 級聯刪除關聯的 SignalHistory 和 PositionHistory
+                # 級聯刪除關聯的歷史資料
                 SignalHistory.objects.filter(session_uuid=oldest.session_uuid).delete()
                 PositionHistory.objects.filter(session_uuid=oldest.session_uuid).delete()
+                HandoverHistory.objects.filter(session_uuid=oldest.session_uuid).delete()
+                ControlAction.objects.filter(session_uuid=oldest.session_uuid).delete()
                 oldest.delete()
 
             return success_response(

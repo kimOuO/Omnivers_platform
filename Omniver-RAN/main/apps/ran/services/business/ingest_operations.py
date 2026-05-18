@@ -34,13 +34,29 @@ class IngestBusinessService:
             signals: [{ue_name, serving_cell, rsrp_dbm, sinr_db, rsrp_map, position?}, ...]
                      已 validate 過的乾淨資料。position 可選，為 [x, y, z]。
             ts: 時間戳 (datetime) — 不給則用現在
-            session_uuid: 可選，來自 RAN-sim 的 session identifier
+            session_uuid: 可選，來自 RAN-sim 的 session identifier。
+                          沒傳就自動補上最近的 running SimulationSession,
+                          這樣 PlaybackController 才能用 session_uuid 把 frame 串回 session。
 
         Returns:
             {"accepted": N, "kit_errors": K}
         """
         ts = ts or TimestampService.get_current_timestamp()
         kit_errors = 0
+
+        # 2026-05-17: caller (tick_loop / 老的 RAN-sim) 沒帶 session_uuid 時 fallback
+        # 到最近的 running SimulationSession,讓 playback frame_count 對得回 session。
+        if not session_uuid:
+            from main.apps.ran.models import SimulationSession
+            active = (
+                SimulationSession.objects
+                .filter(status="running")
+                .order_by("-created_at")
+                .values_list("session_uuid", flat=True)
+                .first()
+            )
+            if active:
+                session_uuid = active
 
         for sig in signals:
             # 1. 歷史
@@ -57,6 +73,11 @@ class IngestBusinessService:
                     "rsrp_dbm": sig["rsrp_dbm"],
                     "sinr_db": sig["sinr_db"],
                     "rsrp_map_json": sig["rsrp_map"],
+                    "throughput_dl_mbps": sig.get("throughput_dl_mbps"),
+                    "throughput_ul_mbps": sig.get("throughput_ul_mbps"),
+                    "mcs_dl": sig.get("mcs_dl"),
+                    "prb_used_dl": sig.get("prb_used_dl"),
+                    "mimo_rank": sig.get("mimo_rank"),
                     "signal_ts": ts,
                 },
             )

@@ -23,6 +23,8 @@ from main.apps.ran.actors.scene_actor import (
     SceneLayoutReader,
     SceneStateReader,
 )
+from main.apps.ran.actors.control_action_actor import ControlActionIngestor, ControlActionReader
+from main.apps.ran.actors.handover_actor import HandoverIngestor, HandoverReader
 from main.apps.ran.actors.sim_session_actor import SimSessionController
 from main.apps.ran.actors.ue_actor import UEController, UEReader
 
@@ -77,6 +79,14 @@ urlpatterns = [
     # ---- RAN/SimSession/Playback ----
     path("RAN/SimSession/PlaybackController/list", PlaybackController.list, name="playback_list"),
     path("RAN/SimSession/PlaybackController/read", PlaybackController.read, name="playback_read"),
+
+    # ---- RAN/Playback/Handover ----
+    path("RAN/Playback/HandoverIngestor/create", HandoverIngestor.create, name="ho_ingest"),
+    path("RAN/Playback/HandoverReader/read", HandoverReader.read, name="ho_read"),
+
+    # ---- RAN/Playback/ControlAction ----
+    path("RAN/Playback/ControlActionIngestor/create", ControlActionIngestor.create, name="ctrl_ingest"),
+    path("RAN/Playback/ControlActionReader/read", ControlActionReader.read, name="ctrl_read"),
 
     # ---- RAN/Assets ----
     path("RAN/Assets/UsdAssetReader/list", UsdAssetReader.list, name="asset_list"),

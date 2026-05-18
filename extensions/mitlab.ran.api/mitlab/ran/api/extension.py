@@ -375,7 +375,29 @@ class RANAPIExtension(omni.ext.IExt):
                 ui.Label(f"HTTP :{API_PORT}  |  WS :{ws_server.WS_PORT}",
                          alignment=ui.Alignment.CENTER, height=30, style={"font_size": 12})
 
+        # Hide built-in dock panels for kiosk-style viewport. Done in code because
+        # .kit dependency `enabled=false` is overridden by transitive bundle deps,
+        # and `app.docks.disabled` doesn't actually unhide existing windows in 110.
+        self._panel_hide_task = omni.kit.async_engine.run_coroutine(self._hide_dock_panels())
+
         print(f"[mitlab.ran.api] HTTP :{API_PORT}  WS :{ws_server.WS_PORT}")
+
+    async def _hide_dock_panels(self):
+        """Repeatedly hide Kit's built-in side panels until they stop showing.
+        Some panels are created lazily after first frame, so we poll a few times."""
+        # Names match the window titles registered by each Kit window extension.
+        panel_names = ["Stage", "Property", "Console", "Content", "Render Settings", "Layer"]
+        app = omni.kit.app.get_app()
+        for _ in range(20):  # ~20 update ticks ≈ <1s of polling
+            await app.next_update_async()
+            for n in panel_names:
+                try:
+                    win = ui.Workspace.get_window(n)
+                    if win is not None and win.visible:
+                        win.visible = False
+                except Exception as e:
+                    print(f"[mitlab.ran.api] hide panel '{n}': {e}")
+        print(f"[mitlab.ran.api] dock panels hidden: {panel_names}")
 
     def on_shutdown(self):
         RANAPIExtension._instance = None
