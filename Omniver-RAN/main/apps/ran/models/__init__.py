@@ -1,6 +1,4 @@
-from main.apps.ran.models.scene_snapshot import SceneSnapshot
 from main.apps.ran.models.gnb_config import GnbConfig
-from main.apps.ran.models.gnb_state import GnbState
 from main.apps.ran.models.ue_config import UeConfig
 from main.apps.ran.models.ue_state import UeState
 from main.apps.ran.models.position_history import PositionHistory
@@ -8,15 +6,13 @@ from main.apps.ran.models.signal_history import SignalHistory
 from main.apps.ran.models.platform_event import PlatformEvent
 from main.apps.ran.models.simulation_session import SimulationSession
 from main.apps.ran.models.building_object import BuildingObject
-from main.apps.ran.models.obstacle_object import ObstacleObject
 from main.apps.ran.models.usd_asset import UsdAsset
 from main.apps.ran.models.handover_history import HandoverHistory
 from main.apps.ran.models.control_action import ControlAction
+from main.apps.ran.models.scenario import Scenario
 
 __all__ = [
-    "SceneSnapshot",
     "GnbConfig",
-    "GnbState",
     "UeConfig",
     "UeState",
     "PositionHistory",
@@ -24,8 +20,8 @@ __all__ = [
     "PlatformEvent",
     "SimulationSession",
     "BuildingObject",
-    "ObstacleObject",
     "UsdAsset",
     "HandoverHistory",
     "ControlAction",
+    "Scenario",
 ]

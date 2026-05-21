@@ -30,11 +30,14 @@ class SimSessionController:
             {
                 "session_uuid": str,
                 "scene_id": str,
-                "scene_snapshot": dict (optional)
+                "scene_snapshot": dict (optional),
+                "mode": "live" | "fast_cached" (optional, default "live"),
+                "scenario_id": str (optional, set when mode=fast_cached),
+                "time_compression_ratio": float (optional, default 1.0)
             }
 
         Returns:
-            {session_uuid, scene_id, status, created_at}
+            {session_uuid, scene_id, status, created_at, mode, scenario_id, time_compression_ratio}
         """
         data, error = parse_body(request)
         if error:
@@ -43,14 +46,34 @@ class SimSessionController:
         session_uuid = data.get("session_uuid")
         scene_id = data.get("scene_id")
         scene_snapshot = data.get("scene_snapshot", {})
+        mode = (data.get("mode") or "live").lower()
+        if mode not in ("live", "fast_cached"):
+            return error_response(f"Invalid mode: {mode}", {}, 400)
+        scenario_id = data.get("scenario_id") or ""
+        try:
+            time_compression_ratio = float(data.get("time_compression_ratio", 1.0))
+        except (TypeError, ValueError):
+            return error_response("Invalid time_compression_ratio", {}, 400)
 
         if not session_uuid or not scene_id:
             return error_response("Missing session_uuid or scene_id", {}, 400)
+        if mode == "fast_cached" and not scenario_id:
+            return error_response(
+                "mode=fast_cached requires scenario_id", {}, 400,
+            )
 
-        log.info("SimSessionController.create session_uuid=%s scene_id=%s", session_uuid, scene_id)
+        log.info(
+            "SimSessionController.create session_uuid=%s scene_id=%s mode=%s scenario_id=%s ratio=%.2f",
+            session_uuid, scene_id, mode, scenario_id, time_compression_ratio,
+        )
 
         try:
-            metadata_json = {"created_by": "ran_sim"}
+            metadata_json = {
+                "created_by": "ran_sim",
+                "mode": mode,
+                "scenario_id": scenario_id,
+                "time_compression_ratio": time_compression_ratio,
+            }
             if scene_snapshot:
                 metadata_json["scene_snapshot"] = scene_snapshot
 
@@ -79,6 +102,9 @@ class SimSessionController:
                     "scene_id": session.scene_id,
                     "status": session.status,
                     "created_at": session.created_at.isoformat(),
+                    "mode": mode,
+                    "scenario_id": scenario_id,
+                    "time_compression_ratio": time_compression_ratio,
                 },
                 message="Session created",
                 status=201,

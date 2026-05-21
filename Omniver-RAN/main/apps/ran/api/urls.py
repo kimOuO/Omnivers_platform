@@ -14,7 +14,6 @@ from main.apps.ran.actors.building_actor import BuildingController
 from main.apps.ran.actors.gnb_actor import GNBController, GNBReader
 from main.apps.ran.actors.history_actor import PositionHistoryReader, SignalHistoryReader
 from main.apps.ran.actors.ingest_actor import SceneIngestor, SignalIngestor
-from main.apps.ran.actors.obstacle_actor import ObstacleController
 from main.apps.ran.actors.platform_actor import PlatformReporter
 from main.apps.ran.actors.playback_actor import PlaybackController
 from main.apps.ran.actors.scene_actor import (
@@ -25,6 +24,7 @@ from main.apps.ran.actors.scene_actor import (
 )
 from main.apps.ran.actors.control_action_actor import ControlActionIngestor, ControlActionReader
 from main.apps.ran.actors.handover_actor import HandoverIngestor, HandoverReader
+from main.apps.ran.actors.scenario_actor import ScenarioController
 from main.apps.ran.actors.sim_session_actor import SimSessionController
 from main.apps.ran.actors.ue_actor import UEController, UEReader
 
@@ -41,11 +41,6 @@ urlpatterns = [
     path("RAN/Scene/BuildingController/read", BuildingController.read, name="building_read"),
     path("RAN/Scene/BuildingController/update", BuildingController.update, name="building_update"),
     path("RAN/Scene/BuildingController/delete", BuildingController.delete, name="building_delete"),
-    path("RAN/Scene/ObstacleController/create", ObstacleController.create, name="obstacle_create"),
-    path("RAN/Scene/ObstacleController/read", ObstacleController.read, name="obstacle_read"),
-    path("RAN/Scene/ObstacleController/update", ObstacleController.update, name="obstacle_update"),
-    path("RAN/Scene/ObstacleController/delete", ObstacleController.delete, name="obstacle_delete"),
-
     # ---- RAN/UE ----
     path("RAN/UE/UEReader/read", UEReader.read, name="ue_read"),
     path("RAN/UE/UEController/create", UEController.create, name="ue_create"),
@@ -87,6 +82,14 @@ urlpatterns = [
     # ---- RAN/Playback/ControlAction ----
     path("RAN/Playback/ControlActionIngestor/create", ControlActionIngestor.create, name="ctrl_ingest"),
     path("RAN/Playback/ControlActionReader/read", ControlActionReader.read, name="ctrl_read"),
+
+    # ---- RAN/Scenario (Phase B fast-replay) ----
+    path("RAN/Scenario/ScenarioController/upload", ScenarioController.upload, name="scenario_upload"),
+    path("RAN/Scenario/ScenarioController/list", ScenarioController.list, name="scenario_list"),
+    path("RAN/Scenario/ScenarioController/read", ScenarioController.read, name="scenario_read"),
+    path("RAN/Scenario/ScenarioController/precompute", ScenarioController.precompute, name="scenario_precompute"),
+    path("RAN/Scenario/ScenarioController/update_status", ScenarioController.update_status, name="scenario_update_status"),
+    path("RAN/Scenario/ScenarioController/delete", ScenarioController.delete, name="scenario_delete"),
 
     # ---- RAN/Assets ----
     path("RAN/Assets/UsdAssetReader/list", UsdAssetReader.list, name="asset_list"),

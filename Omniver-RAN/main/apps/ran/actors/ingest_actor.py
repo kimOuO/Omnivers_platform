@@ -4,7 +4,7 @@ from __future__ import annotations
 from django.db import transaction
 
 from main.apps.ran.actors._http import actor, parse_body
-from main.apps.ran.models import BuildingObject, GnbConfig, ObstacleObject, SceneSnapshot, UeConfig
+from main.apps.ran.models import BuildingObject, GnbConfig, UeConfig
 from main.apps.ran.serializers.ingest_serializers import SignalBatchWriteSerializer
 from main.apps.ran.serializers.scene_serializers import SceneInitWriteSerializer
 from main.apps.ran.services.business.ingest_operations import IngestBusinessService
@@ -56,18 +56,7 @@ class SceneIngestor:
             return error_response("Validation failed", s.errors, 400)
         v = s.validated_data
 
-        timestamp = TimestampService.get_current_timestamp()
-        scene_uuid = UUIDService.generate_uuid("scene", f"{v['scene_id']}:{timestamp.isoformat()}")
         scene_id = v["scene_id"]
-
-        SqlDbBusinessService.create_entity(
-            SceneSnapshot,
-            {
-                "scene_uuid": scene_uuid,
-                "scene_id": scene_id,
-                "config_json": v,
-            },
-        )
 
         # Upsert BuildingObject for each building
         for b in v.get("buildings", []):
@@ -103,38 +92,6 @@ class SceneIngestor:
                 BuildingObject,
                 lookup={"name": name},
                 defaults=building_defaults,
-            )
-
-        # Upsert ObstacleObject for each obstacle
-        for o in v.get("obstacles", []):
-            name = o.get("name")
-            if not name:
-                continue
-            pos = o.get("position", [0, 0, 0])
-            size = o.get("size", [10, 10, 10])
-            color = o.get("color", [0.75, 0.75, 0.75])
-            scale = o.get("scale", [1.0, 1.0, 1.0])
-            SqlDbBusinessService.upsert_entity(
-                ObstacleObject,
-                lookup={"name": name},
-                defaults={
-                    "obstacle_uuid": UUIDService.generate_uuid("obstacle", name),
-                    "scene_id": scene_id,
-                    "pos_x": float(pos[0]) if len(pos) > 0 else 0,
-                    "pos_y": float(pos[1]) if len(pos) > 1 else 0,
-                    "pos_z": float(pos[2]) if len(pos) > 2 else 0,
-                    "size_x": float(size[0]) if len(size) > 0 else 10,
-                    "size_y": float(size[1]) if len(size) > 1 else 10,
-                    "size_z": float(size[2]) if len(size) > 2 else 10,
-                    "color_r": float(color[0]) if len(color) > 0 else 0.75,
-                    "color_g": float(color[1]) if len(color) > 1 else 0.75,
-                    "color_b": float(color[2]) if len(color) > 2 else 0.75,
-                    "material": o.get("material", ""),
-                    "usd_path": o.get("usd", ""),
-                    "scale_x": float(scale[0]) if len(scale) > 0 else 1.0,
-                    "scale_y": float(scale[1]) if len(scale) > 1 else 1.0,
-                    "scale_z": float(scale[2]) if len(scale) > 2 else 1.0,
-                },
             )
 
         # upsert gNB configs with new position/color fields
@@ -198,7 +155,7 @@ class SceneIngestor:
             lambda: _push_scene_to_kit_and_ranpsim(scene_id, config_for_push)
         )
 
-        return success_response({"scene_uuid": scene_uuid, "scene_id": scene_id}, "stored")
+        return success_response({"scene_id": scene_id}, "stored")
 
 
 def _push_scene_to_kit_and_ranpsim(scene_id: str, config_json: dict) -> None:

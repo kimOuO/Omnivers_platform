@@ -1,16 +1,29 @@
 """Scene configuration generator from DB models.
 
-Generates scene_config.json-compatible dict from BuildingObject, ObstacleObject,
-GnbConfig, and UeConfig DB records.
+Generates scene_config.json-compatible dict from BuildingObject, GnbConfig,
+and UeConfig DB records.
 """
 from typing import Any, Optional
 
 from main.apps.ran.models import (
     BuildingObject,
-    ObstacleObject,
     GnbConfig,
     UeConfig,
 )
+
+
+# 全場景統一 USD — 強制 override,忽略 entity 自己的 usd_path,避免多種 USD 混雜
+# 造成的渲染不一致 / 黑屏。對齊 asset registry preset:
+#   - ue:       Office Woman   (preset_id=female_office)
+#   - building: Brownstone 01  (preset_id=brownstone01)
+#   - gnb:      Standard gNB   (preset_id=gnb_standard) — 注意 Kit _build_gnb 目前 ignore `usd`
+#                              欄位,gNB 渲染仍走內建 cone+antenna 幾何;這個值寫上是給未來
+#                              Kit 加 USD reference 用,以及讓 SceneLayoutReader 一致回報。
+_FORCED_USD = {
+    "ue":       "/app/assets/UE/female_office.usda",
+    "building": "/app/assets/building/Brownstone01_Building.usda",
+    "gnb":      "/omniverse/Library/gnb_standard.usda",
+}
 
 
 class SceneConfigGeneratorService:
@@ -24,17 +37,16 @@ class SceneConfigGeneratorService:
             scene_id: Optional filter by scene_id. If None, returns all active records.
 
         Returns:
-            Dict compatible with scene_config.json format (ground/buildings/gnbs/ues/obstacles).
+            Dict compatible with scene_config.json format (ground/buildings/gnbs/ues).
         """
         config = {
             "ground": {"material": "grass", "size": [1000, 1000]},
             "buildings": [],
             "gnbs": [],
             "ues": [],
-            "obstacles": [],
         }
 
-        # Query filters — only BuildingObject and ObstacleObject have scene_id
+        # Query filter — only BuildingObject has scene_id
         building_filters = {} if scene_id is None else {"scene_id": scene_id}
 
         # Buildings
@@ -47,8 +59,8 @@ class SceneConfigGeneratorService:
                 "color": [b.color_r, b.color_g, b.color_b],
                 "rotation_xyz_deg": [b.rot_x, b.rot_y, b.rot_z],
             }
-            if b.usd_path:
-                building_entry["usd"] = b.usd_path
+            if _FORCED_USD["building"]:
+                building_entry["usd"] = _FORCED_USD["building"]
             if b.target_height_m is not None:
                 building_entry["target_height_m"] = b.target_height_m
             if b.material:
@@ -67,6 +79,8 @@ class SceneConfigGeneratorService:
                 "bandwidth_mhz": g.bw_hz / 1e6,
                 "active": g.active,
             }
+            if _FORCED_USD["gnb"]:
+                gnb_entry["usd"] = _FORCED_USD["gnb"]
             if g.target_height_m is not None:
                 gnb_entry["target_height_m"] = g.target_height_m
             if g.cells is not None:
@@ -83,29 +97,12 @@ class SceneConfigGeneratorService:
                 "color": [u.color_r, u.color_g, u.color_b],
                 "speed_mps": u.speed_mps,
             }
-            if u.usd_path:
-                ue_entry["usd"] = u.usd_path
+            if _FORCED_USD["ue"]:
+                ue_entry["usd"] = _FORCED_USD["ue"]
             if u.target_height_m is not None:
                 ue_entry["target_height_m"] = u.target_height_m
             if u.waypoints_json:
                 ue_entry["waypoints"] = u.waypoints_json
             config["ues"].append(ue_entry)
-
-        # Obstacles
-        obstacles_qs = ObstacleObject.objects.filter(**building_filters) if building_filters else ObstacleObject.objects.all()
-        for o in obstacles_qs:
-            obstacle_entry = {
-                "name": o.name,
-                "position": [o.pos_x, o.pos_y, o.pos_z],
-                "size": [o.size_x, o.size_y, o.size_z],
-                "color": [o.color_r, o.color_g, o.color_b],
-            }
-            if o.material:
-                obstacle_entry["material"] = o.material
-            if o.usd_path:
-                obstacle_entry["usd"] = o.usd_path
-            if o.scale_x != 1.0 or o.scale_y != 1.0 or o.scale_z != 1.0:
-                obstacle_entry["scale"] = [o.scale_x, o.scale_y, o.scale_z]
-            config["obstacles"].append(obstacle_entry)
 
         return config

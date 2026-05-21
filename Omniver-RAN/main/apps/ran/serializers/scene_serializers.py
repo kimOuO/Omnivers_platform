@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from main.apps.ran.models import SceneSnapshot
 from main.apps.ran.serializers._base import Serializer
 
 
@@ -14,17 +13,6 @@ class SceneOverviewReadSerializer(Serializer):
             "gnbs": int(instance.get("gnbs", 0) or 0),
             "ues": int(instance.get("ues", 0) or 0),
             "animating": bool(instance.get("animating", False)),
-        }
-
-
-class SceneSnapshotReadSerializer(Serializer):
-    @classmethod
-    def to_representation(cls, instance: SceneSnapshot) -> dict[str, Any]:
-        return {
-            "scene_uuid": instance.scene_uuid,
-            "scene_id": instance.scene_id,
-            "config": instance.config_json,
-            "created_at": instance.scene_created_at.isoformat(),
         }
 
 

@@ -160,10 +160,14 @@ class UEController:
     @staticmethod
     @actor
     def batch_move(request):
-        """批次移動多個 UE 並更新信號（用於 Playback 3D 重播）。
+        """批次移動多個 UE 並更新信號(用於 Playback 3D 重播 + Scenario live sync)。
 
-        Body: { "ues": [{"name": "ue1", "x": 10.0, "y": 0.0, "z": 5.0,
-                         "rsrp_dbm": -80.0, "sinr_db": 15.0, "serving_cell": "cell_1"}, ...] }
+        Body: {
+          "ues": [{"name": "ue1", "x": 10.0, "y": 0.0, "z": 5.0,
+                   "rsrp_dbm": -80.0, "sinr_db": 15.0, "serving_cell": "cell_1"}, ...],
+          "update_db": true   # 選填,true 時也同步 UeConfig.pos_x/y/z(讓 /draw Scene
+                              # Layout polling 看到 UE 即時位置;scenario_driver 用)
+        }
         """
         data, err = parse_body(request)
         if err is not None:
@@ -172,6 +176,7 @@ class UEController:
         ues = data.get("ues")
         if not isinstance(ues, list):
             return error_response("Validation failed", {"ues": "required (list)"}, 400)
+        update_db = bool(data.get("update_db", False))
 
         moved = []
         for ue in ues:
@@ -202,6 +207,17 @@ class UEController:
                         )
                     except Exception as e:  # noqa: BLE001
                         log.warning("batch_move: push_signal failed for %s: %s", name, e)
+                # 同步 Django DB 位置,讓 SceneLayoutReader 讀的到。
+                # 失敗只 warning 不擋(Kit 已經移動成功)。
+                if update_db:
+                    try:
+                        UeConfig.objects.filter(name=name).update(
+                            pos_x=float(ue.get("x", 0.0)),
+                            pos_y=float(ue.get("y", 0.0)),
+                            pos_z=float(ue.get("z", 0.0)),
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("batch_move: DB update failed for %s: %s", name, e)
                 moved.append(name)
             except Exception as e:  # noqa: BLE001
                 log.warning("batch_move: Kit move failed for %s: %s", name, e)

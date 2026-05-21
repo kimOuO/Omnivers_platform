@@ -1,0 +1,291 @@
+"""ScenarioController — Phase B fast-replay scenario CRUD + precompute trigger.
+
+Endpoints:
+  upload      POST body = scenario JSON,落地存 Scenario.raw_json
+  list        POST → 列出所有 scenarios + 狀態
+  read        POST {scenario_id} → 完整 raw_json + 狀態
+  precompute  POST {scenario_id} → 標 status=pending 給 worker pickup(實際 Sionna 跑在 B.2)
+  delete      POST {scenario_id} → 刪除(若 cache 已落地,連 parquet 一起刪)
+"""
+from __future__ import annotations
+
+import os
+
+from main.apps.ran.actors._http import actor, parse_body
+from main.apps.ran.models import Scenario
+from main.utils.logger import get_logger
+from main.utils.response import error_response, success_response
+
+
+log = get_logger(__name__)
+
+# 保留最多筆 scenario,超出後 LRU 刪最舊(連 cache 檔一起)
+MAX_SCENARIOS = 20
+
+
+def _delete_cache_file(scenario: "Scenario") -> bool:
+    """刪 scenario 對應的 npz cache。回傳是否真的有檔被刪。"""
+    if scenario.cache_path and os.path.exists(scenario.cache_path):
+        try:
+            os.remove(scenario.cache_path)
+            return True
+        except OSError as e:
+            log.warning("Failed to delete cache %s: %s", scenario.cache_path, e)
+    return False
+
+
+def _prune_old_scenarios() -> int:
+    """若超過 MAX_SCENARIOS,刪最舊的(LRU by created_at)直到 ≤ MAX_SCENARIOS。
+    回傳刪掉的筆數。"""
+    qs = Scenario.objects.order_by("created_at")
+    count = qs.count()
+    if count <= MAX_SCENARIOS:
+        return 0
+    n_to_delete = count - MAX_SCENARIOS
+    deleted = 0
+    for s in qs[:n_to_delete]:
+        sid = s.scenario_id
+        cache_was = s.cache_path
+        _delete_cache_file(s)
+        s.delete()
+        log.info("LRU prune scenario %s (cache=%s)", sid, cache_was or "—")
+        deleted += 1
+    return deleted
+
+
+def _validate_scenario_json(raw: dict) -> tuple[bool, str]:
+    """最小欄位驗證 — schema 完整版見 docs/plan/fast-replay-mode.md B.1"""
+    required = ["scenario_id", "scene_id", "duration_sec", "tick_ms", "ues"]
+    for k in required:
+        if k not in raw:
+            return False, f"missing field: {k}"
+    if not isinstance(raw["ues"], list) or len(raw["ues"]) == 0:
+        return False, "ues must be non-empty list"
+    for ue in raw["ues"]:
+        if "name" not in ue or "positions" not in ue:
+            return False, "each ue requires name and positions"
+        if not isinstance(ue["positions"], list) or len(ue["positions"]) == 0:
+            return False, f"ue {ue.get('name')} positions empty"
+    # traffic 可選
+    return True, ""
+
+
+class ScenarioController:
+    @staticmethod
+    @actor
+    def upload(request):
+        """Body 直接是 scenario JSON。會覆寫同 scenario_id 的舊紀錄。"""
+        data, error = parse_body(request)
+        if error:
+            return error
+
+        ok, msg = _validate_scenario_json(data)
+        if not ok:
+            return error_response(f"Invalid scenario JSON: {msg}", {}, 400)
+
+        scenario_id = str(data["scenario_id"])
+        try:
+            obj, created = Scenario.objects.update_or_create(
+                scenario_id=scenario_id,
+                defaults={
+                    "scene_id": str(data["scene_id"]),
+                    "raw_json": data,
+                    "duration_sec": float(data["duration_sec"]),
+                    "tick_ms": int(data["tick_ms"]),
+                    "ue_count": len(data["ues"]),
+                    # 上傳會 reset precompute state(舊 cache 失效)
+                    "precompute_status": "pending",
+                    "precompute_progress": 0.0,
+                    "precompute_error": "",
+                    "cache_path": "",
+                    "cache_size_bytes": 0,
+                },
+            )
+            log.info(
+                "Scenario %s: scenario_id=%s scene_id=%s duration=%.1fs ues=%d tick=%dms",
+                "created" if created else "updated", scenario_id, data["scene_id"],
+                data["duration_sec"], len(data["ues"]), data["tick_ms"],
+            )
+            # 新建的話檢查是否超過上限,有就 LRU 刪舊
+            pruned = 0
+            if created:
+                pruned = _prune_old_scenarios()
+            return success_response(
+                {
+                    "scenario_id": obj.scenario_id,
+                    "scene_id": obj.scene_id,
+                    "duration_sec": obj.duration_sec,
+                    "tick_ms": obj.tick_ms,
+                    "ue_count": obj.ue_count,
+                    "precompute_status": obj.precompute_status,
+                    "created": created,
+                    "pruned_old": pruned,
+                    "max_scenarios": MAX_SCENARIOS,
+                },
+                message=(
+                    f"Scenario {'created' if created else 'updated'}"
+                    + (f" — LRU pruned {pruned} old" if pruned > 0 else "")
+                ),
+                status=201 if created else 200,
+            )
+        except Exception as e:
+            log.exception("Failed to upload scenario")
+            return error_response(f"Failed to upload scenario: {e}", {}, 500)
+
+    @staticmethod
+    @actor
+    def list(request):
+        """列出所有 scenarios 摘要(不含 raw_json,避免 payload 太大)。"""
+        _data, error = parse_body(request)
+        if error:
+            return error
+        rows = [
+            {
+                "scenario_id": s.scenario_id,
+                "scene_id": s.scene_id,
+                "duration_sec": s.duration_sec,
+                "tick_ms": s.tick_ms,
+                "ue_count": s.ue_count,
+                "precompute_status": s.precompute_status,
+                "precompute_progress": s.precompute_progress,
+                "precompute_error": s.precompute_error,
+                "cache_path": s.cache_path,
+                "cache_size_bytes": s.cache_size_bytes,
+                "created_at": s.created_at.isoformat(),
+                "updated_at": s.updated_at.isoformat(),
+            }
+            for s in Scenario.objects.all()
+        ]
+        return success_response({"scenarios": rows, "count": len(rows)})
+
+    @staticmethod
+    @actor
+    def read(request):
+        """讀單一 scenario 含完整 raw_json。"""
+        data, error = parse_body(request)
+        if error:
+            return error
+        scenario_id = data.get("scenario_id")
+        if not scenario_id:
+            return error_response("Missing scenario_id", {}, 400)
+        try:
+            s = Scenario.objects.get(scenario_id=scenario_id)
+        except Scenario.DoesNotExist:
+            return error_response(f"Scenario {scenario_id} not found", {}, 404)
+        return success_response({
+            "scenario_id": s.scenario_id,
+            "scene_id": s.scene_id,
+            "duration_sec": s.duration_sec,
+            "tick_ms": s.tick_ms,
+            "ue_count": s.ue_count,
+            "precompute_status": s.precompute_status,
+            "precompute_progress": s.precompute_progress,
+            "precompute_error": s.precompute_error,
+            "cache_path": s.cache_path,
+            "cache_size_bytes": s.cache_size_bytes,
+            "raw_json": s.raw_json,
+            "created_at": s.created_at.isoformat(),
+            "updated_at": s.updated_at.isoformat(),
+        })
+
+    @staticmethod
+    @actor
+    def precompute(request):
+        """觸發 Sionna 離線計算。Phase B MVP 只把 status 標成 pending,
+        實際 worker(physics container 內 run_precompute.py)會自動 pickup。
+
+        Body: {scenario_id}
+        """
+        data, error = parse_body(request)
+        if error:
+            return error
+        scenario_id = data.get("scenario_id")
+        if not scenario_id:
+            return error_response("Missing scenario_id", {}, 400)
+        try:
+            s = Scenario.objects.get(scenario_id=scenario_id)
+        except Scenario.DoesNotExist:
+            return error_response(f"Scenario {scenario_id} not found", {}, 404)
+
+        if s.precompute_status == "running":
+            return error_response(
+                f"Scenario {scenario_id} already running precompute", {}, 409
+            )
+
+        s.precompute_status = "pending"
+        s.precompute_progress = 0.0
+        s.precompute_error = ""
+        s.cache_path = ""
+        s.cache_size_bytes = 0
+        s.save(update_fields=[
+            "precompute_status", "precompute_progress",
+            "precompute_error", "cache_path", "cache_size_bytes",
+        ])
+        log.info("Scenario %s: precompute requested (status=pending)", scenario_id)
+        return success_response(
+            {"scenario_id": scenario_id, "precompute_status": "pending"},
+            message="Precompute job queued",
+        )
+
+    @staticmethod
+    @actor
+    def update_status(request):
+        """Precompute worker callback — 更新單個 scenario 的 status / progress / cache。
+
+        Body: {
+            scenario_id,
+            precompute_status?: pending|running|ready|failed,
+            precompute_progress?: float (0~100),
+            precompute_error?: str,
+            cache_path?: str,
+            cache_size_bytes?: int,
+        }
+        """
+        data, error = parse_body(request)
+        if error:
+            return error
+        scenario_id = data.get("scenario_id")
+        if not scenario_id:
+            return error_response("Missing scenario_id", {}, 400)
+        try:
+            s = Scenario.objects.get(scenario_id=scenario_id)
+        except Scenario.DoesNotExist:
+            return error_response(f"Scenario {scenario_id} not found", {}, 404)
+        updates = []
+        for field in (
+            "precompute_status", "precompute_progress",
+            "precompute_error", "cache_path", "cache_size_bytes",
+        ):
+            if field in data:
+                setattr(s, field, data[field])
+                updates.append(field)
+        if updates:
+            s.save(update_fields=updates)
+            log.info("Scenario %s status update: %s", scenario_id, updates)
+        return success_response({
+            "scenario_id": s.scenario_id,
+            "precompute_status": s.precompute_status,
+            "precompute_progress": s.precompute_progress,
+            "cache_path": s.cache_path,
+        })
+
+    @staticmethod
+    @actor
+    def delete(request):
+        """刪除 scenario,順手刪 parquet。Body: {scenario_id}"""
+        data, error = parse_body(request)
+        if error:
+            return error
+        scenario_id = data.get("scenario_id")
+        if not scenario_id:
+            return error_response("Missing scenario_id", {}, 400)
+        try:
+            s = Scenario.objects.get(scenario_id=scenario_id)
+        except Scenario.DoesNotExist:
+            return error_response(f"Scenario {scenario_id} not found", {}, 404)
+        _delete_cache_file(s)
+        s.delete()
+        log.info("Scenario %s deleted", scenario_id)
+        return success_response(
+            {"scenario_id": scenario_id}, message="Scenario deleted",
+        )

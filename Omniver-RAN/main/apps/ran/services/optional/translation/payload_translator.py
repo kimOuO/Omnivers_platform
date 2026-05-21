@@ -140,7 +140,7 @@ class PayloadTranslator:
 
         gnbs: list[dict[str, Any]] = []
         for g in config_json.get("gnbs", []):
-            gnbs.append({
+            entry: dict[str, Any] = {
                 "name": g["name"],
                 "pci": int(g.get("pci", 0)),
                 "cell_id": str(g.get("cell_id", "")),
@@ -148,7 +148,21 @@ class PayloadTranslator:
                 "frequency_ghz": float(g.get("frequency_ghz", 3.5)),
                 "power_dbm": float(g.get("power_dbm", 43)),
                 "bandwidth_mhz": float(g.get("bandwidth_mhz", 100)),
-            })
+            }
+            # Multi-cell-per-gNB(DAS / multi-TRP)— sionna_engine 看到 cells[] 會
+            # 為每個 cell 建獨立 Transmitter,cells[].position 給 cell 物理位置覆寫。
+            # 沒 cells[] 就退 gNB-level pci/position 的單 cell 行為。
+            if g.get("cells"):
+                entry["cells"] = [
+                    {
+                        "cell_id": str(c.get("cell_id", "")),
+                        "pci": int(c.get("pci", 0)),
+                        "azimuth_deg": float(c.get("azimuth_deg", 0)),
+                        **({"position": c["position"]} if c.get("position") else {}),
+                    }
+                    for c in g["cells"]
+                ]
+            gnbs.append(entry)
 
         ues = [
             {

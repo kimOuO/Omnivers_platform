@@ -11,9 +11,7 @@ OUT = Path(__file__).parent / "db_schema.xlsx"
 DSN = "host=localhost port=5432 dbname=ran_dt user=ran password=ran"
 
 RAN_TABLES = [
-    "scene_snapshot",
     "gnb_config",
-    "gnb_state",
     "ue_config",
     "ue_state",
     "position_history",
@@ -22,13 +20,11 @@ RAN_TABLES = [
 ]
 
 TABLE_PURPOSE = {
-    "scene_snapshot":   "SceneIngestor 寫入的場景定義快照（來自 scene_config.json 或 ingest）",
     "gnb_config":       "gNB 靜態設定：頻率、功率、頻寬、啟停狀態",
-    "gnb_state":        "gNB 即時位置快照（目前未大量使用，未來 gNB 可動時用）",
     "ue_config":        "UE 軌跡設定：waypoints、speed、loop（由 UEController.trajectory 寫入）",
     "ue_state":         "UE 即時快照：位置、serving cell、RSRP、SINR（由 SignalIngestor 更新）",
     "position_history": "UE 位置時序（S7 的 1Hz poller 會往這裡寫）",
-    "signal_history":   "訊號時序：每筆 ingest 的 RSRP/SINR/rsrp_map 全保留",
+    "signal_history":   "訊號時序:每筆 ingest 的 RSRP/SINR/rsrp_map 全保留",
     "platform_events":  "PlatformReporter 寫入的上行事件（目前只落 log，未來真的 POST 給平台）",
 }
 

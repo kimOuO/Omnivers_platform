@@ -50,6 +50,7 @@ class PlaybackController:
                     session_uuid=session.session_uuid
                 ).values("signal_ts").distinct().count()
 
+                meta = session.metadata_json or {}
                 result.append(
                     {
                         "session_uuid": session.session_uuid,
@@ -59,7 +60,11 @@ class PlaybackController:
                         "ended_at": session.ended_at.isoformat() if session.ended_at else None,
                         "duration_ms": duration_ms,
                         "frame_count": frame_count,
-                        "scene_snapshot": session.metadata_json.get("scene_snapshot", {}),
+                        "scene_snapshot": meta.get("scene_snapshot", {}),
+                        # Phase B B.5 — fast_cached session 標記給 Dashboard 切 timeline label
+                        "mode": meta.get("mode", "live"),
+                        "scenario_id": meta.get("scenario_id", ""),
+                        "time_compression_ratio": meta.get("time_compression_ratio", 1.0),
                     }
                 )
 
@@ -285,6 +290,7 @@ class PlaybackController:
                     ue_data.update(pos)
                     frame_ues.append(ue_data)
 
+                meta = session.metadata_json or {}
                 return success_response(
                     {
                         "tick": frame_index,
@@ -293,6 +299,10 @@ class PlaybackController:
                         "control_actions": actions_in_window(prev_ts, target_ts),
                         "cell_states": list(compute_cell_states_at(target_ts).values()),
                         "scene_snapshot": scene_snapshot,
+                        # Phase B B.5 — fast_cached session 標記
+                        "mode": meta.get("mode", "live"),
+                        "scenario_id": meta.get("scenario_id", ""),
+                        "time_compression_ratio": meta.get("time_compression_ratio", 1.0),
                     }
                 )
 
@@ -315,6 +325,7 @@ class PlaybackController:
                     "cell_states": list(compute_cell_states_at(ts).values()),
                 })
 
+            meta = session.metadata_json or {}
             return success_response(
                 {
                     "session_uuid": session.session_uuid,
@@ -326,6 +337,10 @@ class PlaybackController:
                     "scene_snapshot": scene_snapshot,
                     "handovers": [_ho_to_dict(h) for h in all_handovers],
                     "control_actions": [_action_to_dict(a) for a in all_actions],
+                    # Phase B B.5
+                    "mode": meta.get("mode", "live"),
+                    "scenario_id": meta.get("scenario_id", ""),
+                    "time_compression_ratio": meta.get("time_compression_ratio", 1.0),
                 }
             )
         except Exception as e:

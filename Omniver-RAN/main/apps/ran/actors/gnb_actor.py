@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.conf import settings
 
 from main.apps.ran.actors._http import actor, parse_body
-from main.apps.ran.models import GnbConfig, SceneSnapshot
+from main.apps.ran.models import GnbConfig
 from main.apps.ran.serializers.gnb_serializers import (
     GnbReadSerializer,
     GnbStateWriteSerializer,
@@ -146,8 +146,7 @@ class GNBController:
         # ---- Direct push to ranp-sim (override_mode=ran_only) ----
         # ran_only 整批覆蓋 gNB 列表，所以送所有目前 gNB（已 bake 改動），
         # 不是只送剛改那個，否則其他 gNB 會被刪。
-        # pci/cell_id/position 從最新 scene_snapshot 來（SceneIngestor ingest 的）；
-        # freq/power/bw/active 從 live gnb_config 表。
+        # 全部從 live GnbConfig 拉(含 cells[])，不再讀 stale SceneSnapshot。
         bridge_err: str | None = None
         bridge_resp = None
         try:
@@ -171,47 +170,39 @@ class GNBController:
 def _build_full_gnb_list_for_bridge() -> tuple[str | None, list[dict]]:
     """Assemble scene_id + complete gNB list for ranp-sim push (ran_only override).
 
-    Reads the latest SceneSnapshot for structural info (position, pci, cell_id)
-    and merges live runtime values from the GnbConfig table. Skips silently if
-    no snapshot exists — caller treats bridge push as optional.
+    Flattens GnbConfig.cells[] into per-cell entries — ranp-sim push_scene schema
+    is one entry per cell (pci + cell_id + position 各自獨立)。一個 gNB 有 N 個
+    cell 就 emit N 個 entry。GnbConfig.cells 空時 fallback 為「單 cell at gNB
+    position with pci=0, cell_id={name}_c0」。
+
+    scene_id 走 settings 預設 — 不再讀 stale SceneSnapshot。
     """
-    snap = (
-        SceneSnapshot.objects.order_by("-scene_created_at").first()
-        if SceneSnapshot.objects.exists()
-        else None
-    )
-    if snap is None:
-        return (None, [])
-
-    scene_id = snap.scene_id or getattr(settings, "RANPSIM_SCENE_ID", "umi_3sector_v1")
-    snap_gnbs = (snap.config_json or {}).get("gnbs") or []
-
-    # Pull all live configs by name → dict
-    live_by_name = {c.name: c for c in GnbConfig.objects.all()}
-
+    scene_id = getattr(settings, "RANPSIM_SCENE_ID", "umi_3sector_v1")
     out: list[dict] = []
-    for g in snap_gnbs:
-        name = g.get("name")
-        if not name:
-            continue
-        pos = g.get("position") or [0, 0, 0]
-        entry: dict = {
-            "name": name,
-            "pci": int(g.get("pci") or 0),
-            "cell_id": str(g.get("cell_id") or ""),
-            "position": [float(pos[0]), float(pos[1]), float(pos[2])],
-            # Defaults from snapshot; overridden by GnbConfig if present
-            "frequency_ghz": float(g.get("frequency_ghz") or 3.5),
-            "power_dbm": float(g.get("power_dbm") or 43),
-            "bandwidth_mhz": float(g.get("bandwidth_mhz") or 100),
-        }
-        live = live_by_name.get(name)
-        if live is not None:
-            if live.freq_mhz:
-                entry["frequency_ghz"] = float(live.freq_mhz) / 1000.0
-            if live.power_dbm is not None:
-                entry["power_dbm"] = float(live.power_dbm)
-            if live.bw_hz:
-                entry["bandwidth_mhz"] = float(live.bw_hz) / 1_000_000.0
-        out.append(entry)
+    for g in GnbConfig.objects.all():
+        gnb_pos = [float(g.pos_x or 0), float(g.pos_y or 0), float(g.pos_z or 0)]
+        freq_ghz = float(g.freq_mhz) / 1000.0 if g.freq_mhz else 3.5
+        bw_mhz = float(g.bw_hz) / 1_000_000.0 if g.bw_hz else 100.0
+        power_dbm = float(g.power_dbm) if g.power_dbm is not None else 43.0
+
+        cells = g.cells or []
+        if not cells:
+            cells = [{"pci": 0, "cell_id": f"{g.name}_c0", "position": gnb_pos}]
+
+        for i, c in enumerate(cells):
+            cell_id = str(c.get("cell_id") or f"{g.name}_c{i}")
+            pci = int(c.get("pci") or 0)
+            # cell.position 是 DAS / multi-TRP 物理分離用,沒給就 fallback gNB position
+            cpos = c.get("position") or gnb_pos
+            out.append({
+                "name": g.name,
+                "pci": pci,
+                "cell_id": cell_id,
+                "position": [float(cpos[0]), float(cpos[1]), float(cpos[2])],
+                "frequency_ghz": freq_ghz,
+                "power_dbm": power_dbm,
+                "bandwidth_mhz": bw_mhz,
+            })
+    if not out:
+        return (None, [])
     return (scene_id, out)
