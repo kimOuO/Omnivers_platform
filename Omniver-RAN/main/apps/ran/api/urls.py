@@ -22,7 +22,7 @@ from main.apps.ran.actors.scene_actor import (
     SceneLayoutReader,
     SceneStateReader,
 )
-from main.apps.ran.actors.control_action_actor import ControlActionIngestor, ControlActionReader
+from main.apps.ran.actors.control_action_actor import ControlActionIngestor, ControlActionReader, RcObservationReader
 from main.apps.ran.actors.handover_actor import HandoverIngestor, HandoverReader
 from main.apps.ran.actors.scenario_actor import ScenarioController
 from main.apps.ran.actors.sim_session_actor import SimSessionController
@@ -82,11 +82,13 @@ urlpatterns = [
     # ---- RAN/Playback/ControlAction ----
     path("RAN/Playback/ControlActionIngestor/create", ControlActionIngestor.create, name="ctrl_ingest"),
     path("RAN/Playback/ControlActionReader/read", ControlActionReader.read, name="ctrl_read"),
+    path("RAN/RC/RcObservationReader/read", RcObservationReader.read, name="rc_obs_read"),
 
     # ---- RAN/Scenario (Phase B fast-replay) ----
     path("RAN/Scenario/ScenarioController/upload", ScenarioController.upload, name="scenario_upload"),
     path("RAN/Scenario/ScenarioController/list", ScenarioController.list, name="scenario_list"),
     path("RAN/Scenario/ScenarioController/read", ScenarioController.read, name="scenario_read"),
+    path("RAN/Scenario/ScenarioController/apply_to_scene", ScenarioController.apply_to_scene, name="scenario_apply_to_scene"),
     path("RAN/Scenario/ScenarioController/precompute", ScenarioController.precompute, name="scenario_precompute"),
     path("RAN/Scenario/ScenarioController/update_status", ScenarioController.update_status, name="scenario_update_status"),
     path("RAN/Scenario/ScenarioController/delete", ScenarioController.delete, name="scenario_delete"),

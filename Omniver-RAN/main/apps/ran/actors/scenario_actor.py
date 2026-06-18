@@ -12,7 +12,13 @@ from __future__ import annotations
 import os
 
 from main.apps.ran.actors._http import actor, parse_body
-from main.apps.ran.models import Scenario
+from main.apps.ran.models import BuildingObject, GnbConfig, Scenario, UeConfig
+from main.apps.ran.services.business.kit_operations import KitBusinessService
+from main.apps.ran.services.common.timestamp_service import TimestampService
+from main.apps.ran.services.common.uuid_service import UUIDService
+from main.apps.ran.services.optional.scene_config_generator import (
+    SceneConfigGeneratorService,
+)
 from main.utils.logger import get_logger
 from main.utils.response import error_response, success_response
 
@@ -187,6 +193,122 @@ class ScenarioController:
             "created_at": s.created_at.isoformat(),
             "updated_at": s.updated_at.isoformat(),
         })
+
+    @staticmethod
+    @actor
+    def apply_to_scene(request):
+        """把劇本拓樸寫進 Omniverse 場景表(GnbConfig/UeConfig/BuildingObject),
+        讓 Scene Editor 的 Scene Layout 與 3D(scene_config→Kit)反映該劇本場景。
+
+        ★ 會「覆蓋」目前場景表(整批清掉再依劇本重建)—— 這是「選劇本即套用」
+          的語意:場景=劇本拓樸,不保留手動編輯。
+
+        Body: {scenario_id}
+        座標慣例:劇本 position=[x, y(height), z];UE positions=[t, x, y, z]
+        (套用時丟掉時間軸 t,waypoints 存 [x,y,z])。
+        """
+        data, error = parse_body(request)
+        if error:
+            return error
+        scenario_id = data.get("scenario_id")
+        if not scenario_id:
+            return error_response("Missing scenario_id", {}, 400)
+        try:
+            s = Scenario.objects.get(scenario_id=scenario_id)
+        except Scenario.DoesNotExist:
+            return error_response(f"Scenario {scenario_id} not found", {}, 404)
+
+        raw = s.raw_json or {}
+        ts = TimestampService.get_current_timestamp()
+        try:
+            # 1) 整批清掉舊場景表(覆蓋語意)
+            GnbConfig.objects.all().delete()
+            UeConfig.objects.all().delete()
+            BuildingObject.objects.all().delete()
+
+            # 2) gNBs(含 cells[] per-sector)
+            n_gnb = 0
+            for g in raw.get("gnbs", []) or []:
+                name = g.get("name")
+                if not name:
+                    continue
+                pos = g.get("position", [0, 0, 0]) or [0, 0, 0]
+                GnbConfig.objects.create(
+                    gnb_uuid=UUIDService.generate_uuid("gnb", name),
+                    name=name,
+                    freq_mhz=float(g.get("frequency_ghz", 3.5)) * 1000.0,
+                    power_dbm=float(g.get("power_dbm", 10.0)),
+                    bw_hz=float(g.get("bandwidth_mhz", 40.0)) * 1_000_000.0,
+                    active=bool(g.get("active", True)),
+                    pos_x=float(pos[0]), pos_y=float(pos[1]), pos_z=float(pos[2]),
+                    cells=g.get("cells") or [],
+                    gnb_created_at=ts, gnb_updated_at=ts,
+                )
+                n_gnb += 1
+
+            # 3) UEs(positions=[t,x,y,z] → 首點為 pos,全部去 t 存 waypoints)
+            n_ue = 0
+            for u in raw.get("ues", []) or []:
+                name = u.get("name")
+                positions = u.get("positions") or []
+                if not name or not positions:
+                    continue
+                wps = [[float(p[1]), float(p[2]), float(p[3])] for p in positions]
+                first = wps[0]
+                UeConfig.objects.create(
+                    ue_uuid=UUIDService.generate_uuid("ue", name),
+                    name=name,
+                    waypoints_json=wps,
+                    pos_x=first[0], pos_y=first[1], pos_z=first[2],
+                    loop=False,
+                    ue_created_at=ts, ue_updated_at=ts,
+                )
+                n_ue += 1
+
+            # 4) Buildings(劇本若無 buildings 則場景無建築 = open field)
+            n_bld = 0
+            for b in raw.get("buildings", []) or []:
+                name = b.get("name")
+                if not name:
+                    continue
+                pos = b.get("position", [0, 0, 0]) or [0, 0, 0]
+                size = b.get("size", [10, 10, 10]) or [10, 10, 10]
+                BuildingObject.objects.create(
+                    building_uuid=UUIDService.generate_uuid("building", name),
+                    name=name,
+                    scene_id=str(raw.get("scene_id", "")),
+                    pos_x=float(pos[0]), pos_y=float(pos[1]), pos_z=float(pos[2]),
+                    size_x=float(size[0]), size_y=float(size[1]), size_z=float(size[2]),
+                    building_created_at=ts, building_updated_at=ts,
+                )
+                n_bld += 1
+
+            # 5) 重新產生 scene_config 並推給 Kit / Omniverse(3D 同步)
+            kit_ok = True
+            kit_err = ""
+            try:
+                config = SceneConfigGeneratorService.generate()
+                KitBusinessService.push_scene_config(config)
+            except Exception as e:  # noqa: BLE001
+                kit_ok = False
+                kit_err = str(e)
+                log.warning("apply_to_scene: Kit push failed (場景表已更新): %s", e)
+
+            log.info(
+                "Scenario %s applied to scene: gnbs=%d ues=%d buildings=%d kit=%s",
+                scenario_id, n_gnb, n_ue, n_bld, "ok" if kit_ok else "fail",
+            )
+            return success_response(
+                {
+                    "scenario_id": scenario_id,
+                    "gnbs": n_gnb, "ues": n_ue, "buildings": n_bld,
+                    "kit_pushed": kit_ok, "kit_error": kit_err,
+                },
+                message=f"Scene populated from scenario {scenario_id}",
+            )
+        except Exception as e:
+            log.exception("apply_to_scene failed")
+            return error_response(f"apply_to_scene failed: {e}", {}, 500)
 
     @staticmethod
     @actor
