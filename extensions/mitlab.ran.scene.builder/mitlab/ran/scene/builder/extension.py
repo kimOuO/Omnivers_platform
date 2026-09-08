@@ -183,6 +183,32 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             pass
         return False
 
+    def _set_environment_ceiling_visible(self, stage, visible):
+        """顯示/隱藏環境 USD 裡的 Ceiling 群組。
+
+        室內掃描是一個封閉盒子，從外面只看得到屋頂。glb_to_usd 匯入時已經把
+        切面高度以上的幾何收進 `<root>/Ceiling` prim，這裡把它設 invisible
+        就等於做了一刀水平剖面，可以從上往下看走廊內部與 UE 的位置。
+        找不到 Ceiling（例如 OSM 地圖）時什麼都不做。
+        """
+        env_root = stage.GetPrimAtPath("/World/Environment")
+        if not env_root.IsValid():
+            return 0
+        hidden = 0
+        for prim in Usd.PrimRange(env_root):
+            if prim.GetName() != "Ceiling":
+                continue
+            imageable = UsdGeom.Imageable(prim)
+            if not imageable:
+                continue
+            if visible:
+                imageable.MakeVisible()
+            else:
+                imageable.MakeInvisible()
+            hidden += 1
+        print(f"[RAN] Environment ceiling {'shown' if visible else 'hidden'}: {hidden} prim(s)")
+        return hidden
+
     def _apply_environment_fallback_colors(self, stage):
         """If the environment uses materials not supported by the active renderer (e.g., Storm),
         displayColor helps avoid an all-white look.
@@ -416,6 +442,8 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 except Exception as e:
                     print(f"[RAN] Environment payload load skipped (non-fatal): {e}")
                 self._apply_environment_fallback_colors(stage)
+                if env_cfg.get("hide_ceiling"):
+                    self._set_environment_ceiling_visible(stage, False)
 
             self._build_lights(stage)
 
@@ -691,7 +719,8 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         print(f"[RAN] move_ue: '{name}' → ({float(x):.1f}, {yv:.1f}, {float(z):.1f})")
 
     def push_signal(self, name, serving_cell=None, rsrp_dbm=None,
-                    sinr_db=None, rsrp_map=None, serving_gnb=None, serving_pci=None, serving_cell_id=None):
+                    sinr_db=None, rsrp_map=None, serving_gnb=None, serving_pci=None, serving_cell_id=None,
+                    throughput_dl_mbps=None, throughput_ul_mbps=None):
         """Write ran:* custom attributes on a UE prim. mitlab.ran.labels reads
         these every frame to render the billboard text above the UE."""
         stage = omni.usd.get_context().get_stage()
@@ -731,6 +760,15 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             prim.CreateAttribute(
                 "ran:serving_cell_id", Sdf.ValueTypeNames.String, False
             ).Set(str(serving_cell_id))
+        # Wireless KPI: throughput (labels 顯示 UE 頭上 DL/UL Mbps)
+        if throughput_dl_mbps is not None:
+            prim.CreateAttribute(
+                "ran:throughput_dl_mbps", Sdf.ValueTypeNames.Float, False
+            ).Set(float(throughput_dl_mbps))
+        if throughput_ul_mbps is not None:
+            prim.CreateAttribute(
+                "ran:throughput_ul_mbps", Sdf.ValueTypeNames.Float, False
+            ).Set(float(throughput_ul_mbps))
         print(f"[RAN] push_signal: ✅ Attributes written to prim /World/{prim_name}")
         # Force notice by reading back
         try:
@@ -790,8 +828,8 @@ class RANSceneBuilderExtension(omni.ext.IExt):
             else:
                 height = py * gnb_scale * 4.0
 
-            base_radius = 60.0 * gnb_scale
-            ant_radius = 24.0 * gnb_scale
+            base_radius = 3.0 * gnb_scale  # 塔底半徑 ~3 m(真實尺度)
+            ant_radius = 1.5 * gnb_scale   # 天線 ~1.5 m(真實尺度)
 
             gnb_container = stage.GetPrimAtPath(f"/World/{name}")
             if gnb_container.IsValid():
@@ -1058,7 +1096,9 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         if target_h is not None:
             height = float(target_h)
         else:
-            height = float(pos[1]) * gnb_scale * 4.0
+            # 塔高 = gNB 掛載高度(從地面長到天線)。舊值 ×4 會讓 30 m 的 gNB
+            # 變成 120 m 高塔,與真實建築(平均 ~12.5 m)完全不成比例。
+            height = max(float(pos[1]), 1.0) * gnb_scale
 
         container_path = f"/World/{_to_prim_name(name)}"
         container = UsdGeom.Xform.Define(stage, container_path)
@@ -1071,16 +1111,30 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         if not cells:
             cells = [{"pci": None, "azimuth_deg": 0.0}]
 
-        ant_radius = 24.0 * gnb_scale
-        base_radius = 60.0 * gnb_scale
+        ant_radius = 1.5 * gnb_scale   # 天線 ~1.5 m(真實尺度)
+        base_radius = 3.0 * gnb_scale  # 塔底半徑 ~3 m(真實尺度)
 
         for cell_idx, cell in enumerate(cells):
             azimuth = float(cell.get("azimuth_deg") or 0.0)
+            # Multi-TRP / DAS: 若 cell 有自己的 position,相對 gNB container 做本地位移,
+            # 讓實體分離的 cell(如兩個 360° cell 各在一處)畫在各自位置,而非全疊在 gNB 原點。
+            # container 已持有 gNB 世界 XZ,故這裡用 (cell - gnb) 差值。
+            cx_off, cz_off = 0.0, 0.0
+            cpos = cell.get("position")
+            if cpos and len(cpos) >= 3:
+                try:
+                    cx_off = float(cpos[0]) - float(pos[0])
+                    cz_off = float(cpos[2]) - float(pos[2])
+                except (TypeError, ValueError):
+                    cx_off, cz_off = 0.0, 0.0
 
-            # Create a wrapper Xform for this cell (enables azimuth rotation)
+            # Create a wrapper Xform for this cell (translate to cell pos, then azimuth rotation)
             cell_path = f"{container_path}/cell_{cell_idx}"
-            print(f"[RAN] Building cell {cell_idx} at {cell_path}, azimuth={azimuth}")
+            print(f"[RAN] Building cell {cell_idx} at {cell_path}, azimuth={azimuth}, offset=({cx_off},{cz_off})")
             cell_xform = UsdGeom.Xform.Define(stage, cell_path)
+            # 先 translate(定位)再 rotateY(就地轉向),順序讓旋轉是本地的。
+            if cx_off or cz_off:
+                cell_xform.AddTranslateOp().Set(Gf.Vec3d(cx_off, 0.0, cz_off))
             if azimuth:
                 cell_xform.AddRotateYOp().Set(azimuth)
 
@@ -1116,15 +1170,15 @@ class RANSceneBuilderExtension(omni.ext.IExt):
                 UsdGeom.Gprim(ant).CreateDisplayColorPrimvar(
                     UsdGeom.Tokens.constant).Set([Gf.Vec3f(1.0, 1.0, 0.0)])
 
-        # Radiation "waves" (drawn as concentric rings) — shared for all cells.
-        # Center is local (container already holds world position).
-        self._build_rru_waves(
-            stage=stage,
-            parent_path=container_path,
-            center=(0.0, float(height + ant_radius), 0.0),
-            color=(1.0, 0.9, 0.2),
-            scale=gnb_scale,
-        )
+            # Radiation "waves" per cell — 掛在 cell_xform 下,隨 cell 位移/azimuth 一起走,
+            # 讓每個實體分離的 cell 各自輻射(而非全部只在 gNB 原點畫一組)。
+            self._build_rru_waves(
+                stage=stage,
+                parent_path=cell_path,
+                center=(0.0, float(height + ant_radius), 0.0),
+                color=(1.0, 0.9, 0.2),
+                scale=gnb_scale,
+            )
 
         # Support both formats: 'frequency_ghz' (from DB) or 'freq_mhz' (from API)
         freq_ghz = config.get('frequency_ghz') or (config.get('freq_mhz', 0) / 1000.0)
