@@ -79,7 +79,7 @@ from main.apps.ran.services.optional.glb_to_usd import (
 )
 
 # 規則版本 —— 門檻調整後請 +1，落地的 json 會記錄，方便回溯是哪一版分出來的
-RULESET_VERSION = 6
+RULESET_VERSION = 9
 
 LABELS = ["itu_concrete", "itu_wood", "itu_glass", "itu_metal"]
 LABEL_IDX = {name: i for i, name in enumerate(LABELS)}
@@ -116,7 +116,8 @@ MIN_PATCH_AREA_M2 = 0.3
 # 木頭飽和度門檻改成「取固定下限與場景百分位的較大者」。
 # 固定門檻對相機設定極度敏感：實測白平衡偏暖 12%，木頭面積就從
 # 72.5 m² 暴增到 152.8 m²（+111%），因為整個場景被推進木頭色相帶。
-WOOD_SAT_PERCENTILE = 88.0
+WOOD_SAT_PERCENTILE = 88.0     # 只在 Otsu 失敗時的後備
+WOOD_SAT_MAX_THRESH = 0.50     # 門檻上限，避免 Otsu 在無木頭場景切得太高
 
 
 def _sample_texture(img: np.ndarray, uv: np.ndarray) -> np.ndarray:
@@ -177,6 +178,33 @@ def _adjacent_to(mask: np.ndarray, faces: np.ndarray, points: np.ndarray) -> np.
                 out[fi] = True
                 break
     return out
+
+
+def _otsu_threshold(values: np.ndarray, weights: np.ndarray, bins: int = 64) -> float | None:
+    """面積加權的 Otsu 門檻：找雙峰分布的谷底。
+
+    為什麼不用百分位：百分位假設「目標材質是少數」。體育館的木地板佔了
+    場景大部分面積，第 88 百分位會落在木頭自己的分布裡，把木頭整片排除
+    （實測 recall 只有 0.121）。Otsu 找的是兩群之間的谷底，與比例無關。
+    """
+    if len(values) < 100:
+        return None
+    hist, edges = np.histogram(values, bins=bins, range=(0.0, 1.0), weights=weights)
+    total = hist.sum()
+    if total <= 0:
+        return None
+    centres = (edges[:-1] + edges[1:]) / 2
+    w0 = np.cumsum(hist)
+    w1 = total - w0
+    valid = (w0 > 0) & (w1 > 0)
+    if not valid.any():
+        return None
+    m0 = np.cumsum(hist * centres)
+    mu0 = np.divide(m0, w0, out=np.zeros_like(m0), where=w0 > 0)
+    mu1 = np.divide(m0[-1] - m0, w1, out=np.zeros_like(m0), where=w1 > 0)
+    var_between = w0 * w1 * (mu0 - mu1) ** 2
+    var_between[~valid] = -1
+    return float(centres[int(np.argmax(var_between))])
 
 
 def _despeckle(labels: np.ndarray, faces: np.ndarray, points: np.ndarray,
@@ -258,6 +286,10 @@ def _structural_pass(points, faces, area, labels, rgb, is_horizontal, is_vertica
     這一層是用來「把猜測變成證據」的，不該讓匯入整個失敗。
     """
     total_area = float(area.sum())
+    # 注意：水平面的 concrete 只有在「色彩也不像木頭」時才算有證據。
+    # 體育館基準測出 evidence 99.9% 但正確率只有 0.664 —— 木地板觸發
+    # 「水平面 → concrete」時信心滿滿卻是錯的。證據指標若只看「規則有沒有
+    # 開火」而不看「規則適不適用」，就會變成自信地犯錯。
     proven = (labels == LABEL_IDX["itu_wood"]) | is_horizontal | (~is_vertical)
     if extra_proven is not None:
         proven = proven | extra_proven
@@ -278,6 +310,17 @@ def _structural_pass(points, faces, area, labels, rgb, is_horizontal, is_vertica
         neighbours = {f["id"]: f["neighbours"] for f in feats}
         surface_of_face, surfaces = merge_into_surfaces(points, faces, seg, neighbours)
 
+        # 房間淨高：牆的判準要相對於它，不能寫死。合成場景基準測出天花板
+        # 2.35 m 的小辦公室，牆面既不到 8 m² 也不到 2.4 m 通高，
+        # 兩條絕對門檻都不滿足 → 證據涵蓋率只剩 66.6%。
+        # 房高要從**估到的地板**起算，不能用全域 y 範圍：真實掃描常帶到樓下
+        # 結構（這份走廊有 2.15 m 在地板以下），用全域範圍會把房高算成 6 m、
+        # 門檻推到 4.2 m，連正常的牆都不夠高（實測證據涵蓋率掉 3 個百分點）。
+        # 上限 2.5 m：牆的判準只是要跟門區分開，門最高就 2.4 m，
+        # 不需要因為天花板 9 m 的體育館就要求牆跨越 6 m。
+        room_height = float(np.percentile(points[:, 1], 99) - floor_y)
+        span_thresh = float(np.clip(0.7 * room_height, 1.6, 2.5))
+
         for s in surfaces:
             m = surface_of_face == s["id"]
             if not m.any():
@@ -288,9 +331,9 @@ def _structural_pass(points, faces, area, labels, rgb, is_horizontal, is_vertica
                 key = "concrete_floor_ceiling"
             elif s["tilt_deg"] >= 30:
                 key = "concrete_slanted"
-            elif a >= 8.0 or span >= 2.4:
-                # 8 m² 以上、或從地板通到 2.4 m 以上的垂直表面 —— 門不會這麼大，
-                # 也不會通到天花板。這是幾何證據而非猜測。
+            elif a >= 8.0 or span >= span_thresh:
+                # 8 m² 以上、或縱向跨越房間 70% 高度的垂直表面 —— 門不會這麼大，
+                # 也不會從地板通到天花板。這是幾何證據而非猜測。
                 key = "concrete_wall"
             else:
                 continue
@@ -446,19 +489,27 @@ def classify(blob: bytes, mode: str = "conservative") -> dict[str, Any]:
 
     # ── 規則 ──
     labels = np.full(n_faces, LABEL_IDX["itu_concrete"], dtype=np.uint8)
-    candidate = is_vertical & valid_color   # 只有垂直面才進色彩規則
+    candidate = is_vertical & valid_color   # glass/metal 的色彩規則只看垂直面
+    # 木頭不設朝向限制：合成場景基準測出體育館的**木地板** recall 只有 0.004，
+    # 「水平面一律混凝土」是走廊場景的偏見（那裡地板是磨石子）。
+    # 木頭的色彩特徵是肯定式的（色相窄帶 + 高飽和），朝向不該當否決條件。
+    wood_candidate = valid_color
 
     # 飽和度門檻自我校準：木頭在任何場景都是「飽和度明顯高於場景多數表面」
     # 的那一群，用百分位比用絕對值穩。仍保留固定下限，避免全是木頭的場景
     # 把門檻拉到荒謬的高度。
     sat_thresh = WOOD_SAT_MIN
-    if is_vertical.any() and valid_color.any():
-        vs = sat[is_vertical & valid_color]
-        if len(vs) > 100:
+    if valid_color.any():
+        vs = sat[valid_color]
+        ws = area[valid_color]
+        otsu = _otsu_threshold(vs, ws)
+        if otsu is not None:
+            sat_thresh = float(np.clip(max(WOOD_SAT_MIN, otsu), WOOD_SAT_MIN, WOOD_SAT_MAX_THRESH))
+        elif len(vs) > 100:
             sat_thresh = max(WOOD_SAT_MIN, float(np.percentile(vs, WOOD_SAT_PERCENTILE)))
 
     # 唯一有正面證據的類別：不透明 + 漫反射 + 色相集中的木頭
-    wood = candidate & (hue >= WOOD_HUE[0]) & (hue <= WOOD_HUE[1]) \
+    wood = wood_candidate & (hue >= WOOD_HUE[0]) & (hue <= WOOD_HUE[1]) \
         & (sat >= sat_thresh) & (val >= WOOD_VAL[0]) & (val <= WOOD_VAL[1])
     labels[wood] = LABEL_IDX["itu_wood"]
 
