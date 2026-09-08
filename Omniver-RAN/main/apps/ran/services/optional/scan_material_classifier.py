@@ -411,6 +411,7 @@ def classify(blob: bytes, mode: str = "conservative") -> dict[str, Any]:
         "points": points,
         "faces": faces,
         "labels": labels,
+        "rgb": rgb_mean,
         "area": area,
         "stats": stats,
         "despeckle": {"faces_reverted_to_concrete": despeckled, "raw_face_counts": raw_counts},
@@ -459,6 +460,9 @@ def classify_and_record(blob: bytes, base_path: str | Path,
     np.savez_compressed(
         npz_path,
         labels=result["labels"],
+        # 逐面平均色一併存起來：分割層要用色彩把門從牆上切開，
+        # 沒存的話下游得重解 15 張 4K JPEG（約 3 秒）
+        rgb=result["rgb"].astype(np.float32),
         label_names=np.array(LABELS),
         faces=result["faces"].astype(np.int32),
         points=result["points"].astype(np.float32),
