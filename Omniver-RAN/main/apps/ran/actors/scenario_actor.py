@@ -76,6 +76,37 @@ def _validate_scenario_json(raw: dict) -> tuple[bool, str]:
     return True, ""
 
 
+def _interp_position(positions, t):
+    """在帶時戳的 positions 上內插出 t 時刻的座標。
+
+    positions 是 [[t,x,y,z], ...]（劇本原生格式）。注意 apply_to_scene 寫進
+    UeConfig.waypoints_json 時會把時間軸丟掉，所以要回頭讀 raw_json 才有時戳。
+    """
+    if not positions:
+        return None
+    if len(positions[0]) < 4:
+        return None                      # 沒有時戳的舊劇本，無法定位
+    if t <= positions[0][0]:
+        p = positions[0]
+        return [p[1], p[2], p[3]]
+    if t >= positions[-1][0]:
+        p = positions[-1]
+        return [p[1], p[2], p[3]]
+    lo, hi = 0, len(positions) - 1
+    while lo + 1 < hi:                    # 二分搜尋：24 小時劇本每人上千個點
+        mid = (lo + hi) // 2
+        if positions[mid][0] <= t:
+            lo = mid
+        else:
+            hi = mid
+    a, b = positions[lo], positions[hi]
+    span = b[0] - a[0]
+    f = 0.0 if span <= 0 else (t - a[0]) / span
+    return [a[1] + (b[1] - a[1]) * f,
+            a[2] + (b[2] - a[2]) * f,
+            a[3] + (b[3] - a[3]) * f]
+
+
 class ScenarioController:
     @staticmethod
     @actor
@@ -335,7 +366,7 @@ class ScenarioController:
         prim 一直存在。Kit 自己的動畫是累積位移、沒有絕對時鐘，算不出
         「幾點該有幾個人」，所以由後端讀劇本的 active 時間軸再推給 Kit。
 
-        Body: {scenario_id, t_sec}
+        Body: {scenario_id, t_sec, move_ues?, ground_y?}
         t_sec 可以超過 duration_sec，會自動取模（方便循環播放）。
         """
         data, error = parse_body(request)
@@ -357,6 +388,12 @@ class ScenarioController:
         dur = float(raw.get("duration_sec") or 0) or 86400.0
         t = t % dur
 
+        move_ues = bool(data.get("move_ues", True))
+        # 劇本 positions 的 y 是**天線高度**（既有劇本慣例寫 1.5），但 Kit 的
+        # move_ue / _align_prim_to_ground_y 把 y 當成**腳底高度** —— 直接把
+        # 劇本的 y 推給 Kit，人會整個浮在半空（實測浮 1.7 m）。
+        # 城市尺度看不出來（人被放大到 34 m，偏移只佔 4%），室內就很明顯。
+        ground_y = float(data.get("ground_y", 0.0))
         present, absent, no_window = [], [], []
         for u in raw.get("ues", []) or []:
             name = u.get("name")
@@ -373,17 +410,28 @@ class ScenarioController:
             else:
                 absent.append(name)
 
-        ok, failed = 0, []
-        for name in present:
-            if KitBusinessService.set_ue_visible(name, True):
+        present_set = set(present)
+        # 位置也要一起推 —— 只切可見性的話，UE 會停在 waypoint 清單的第一個點
+        # （劇本從午夜開始，那時沒人，所以所有人都疊在等候點上），
+        # Scene Layout 會看到一堆標記擠在走廊外的同一個座標。
+        by_name = {u.get("name"): u for u in raw.get("ues", []) or []}
+        ok, failed, moved = 0, [], 0
+        for name in present + absent:
+            visible = name in present_set
+            if KitBusinessService.set_ue_visible(name, visible):
                 ok += 1
             else:
                 failed.append(name)
-        for name in absent:
-            if KitBusinessService.set_ue_visible(name, False):
-                ok += 1
-            else:
-                failed.append(name)
+            if not move_ues:
+                continue
+            pos = _interp_position((by_name.get(name) or {}).get("positions") or [], t)
+            if pos is None:
+                continue
+            try:
+                KitBusinessService.move_ue(name, x=pos[0], y=ground_y, z=pos[2])
+                moved += 1
+            except Exception:  # noqa: BLE001
+                failed.append(f"{name}(move)")
 
         hh, mm = int(t // 3600), int((t % 3600) // 60)
         log.info("apply_time %s @ %02d:%02d — 在場 %d / 離場 %d",
@@ -394,8 +442,9 @@ class ScenarioController:
              "present": present, "absent": absent,
              "present_count": len(present), "absent_count": len(absent),
              "ues_without_active_window": no_window,
-             "kit_calls_ok": ok, "kit_calls_failed": failed},
-            message=f"{hh:02d}:{mm:02d} — 在場 {len(present)} 人、離場 {len(absent)} 人已隱藏",
+             "kit_calls_ok": ok, "kit_calls_failed": failed, "moved": moved},
+            message=(f"{hh:02d}:{mm:02d} — 在場 {len(present)} 人、離場 {len(absent)} 人已隱藏"
+                     + (f"，{moved} 人位置已更新" if moved else "")),
         )
 
     @staticmethod
