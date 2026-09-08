@@ -105,4 +105,29 @@ class SceneConfigGeneratorService:
                 ue_entry["waypoints"] = u.waypoints_json
             config["ues"].append(ue_entry)
 
+        # 當前套用的地圖(統一場景狀態)—— active 地圖以 environment 環境載入,
+        # skip_buildings 避免和地圖建築重疊。Scene Layout / build 都會一致帶上。
+        from main.apps.ran.models import MapScene
+        active_map = MapScene.objects.filter(active=True, status="ready").first()
+        if active_map and active_map.usd_path:
+            config["environment"] = {
+                "template_usd": active_map.usd_path,
+                "name": active_map.name,
+            }
+            config["skip_buildings"] = True
+            if active_map.indoor_mode:
+                # 室內掃描:收起天花板才看得到裡面,gNB 視覺尺寸也要縮到室內比例
+                config["environment"]["hide_ceiling"] = True
+                config["gnb_visual_scale"] = float(active_map.gnb_visual_scale or 1.0)
+            # 附上 2D 建築輪廓,讓前端 TopDownMap 也畫得出校園俯視
+            import json as _json
+            import os as _os
+            fp = _os.path.splitext(active_map.usd_path)[0] + ".footprints.json"
+            if _os.path.exists(fp):
+                try:
+                    with open(fp, encoding="utf-8") as f:
+                        config["map_footprints"] = _json.load(f)
+                except Exception:  # noqa: BLE001
+                    pass
+
         return config

@@ -10,6 +10,7 @@ from main.apps.ran.models.usd_asset import UsdAsset
 from main.apps.ran.models.handover_history import HandoverHistory
 from main.apps.ran.models.control_action import ControlAction
 from main.apps.ran.models.scenario import Scenario
+from main.apps.ran.models.map_scene import MapScene
 
 __all__ = [
     "GnbConfig",
@@ -24,4 +25,5 @@ __all__ = [
     "HandoverHistory",
     "ControlAction",
     "Scenario",
+    "MapScene",
 ]

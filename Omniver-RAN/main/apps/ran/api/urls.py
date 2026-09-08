@@ -25,6 +25,7 @@ from main.apps.ran.actors.scene_actor import (
 from main.apps.ran.actors.control_action_actor import ControlActionIngestor, ControlActionReader, RcObservationReader
 from main.apps.ran.actors.handover_actor import HandoverIngestor, HandoverReader
 from main.apps.ran.actors.scenario_actor import ScenarioController
+from main.apps.ran.actors.map_actor import MapController
 from main.apps.ran.actors.sim_session_actor import SimSessionController
 from main.apps.ran.actors.ue_actor import UEController, UEReader
 
@@ -92,6 +93,19 @@ urlpatterns = [
     path("RAN/Scenario/ScenarioController/precompute", ScenarioController.precompute, name="scenario_precompute"),
     path("RAN/Scenario/ScenarioController/update_status", ScenarioController.update_status, name="scenario_update_status"),
     path("RAN/Scenario/ScenarioController/delete", ScenarioController.delete, name="scenario_delete"),
+
+    # ---- RAN/Map (OpenStreetMap → USD scene) ----
+    path("RAN/Map/MapController/geocode", MapController.geocode, name="map_geocode"),
+    path("RAN/Map/MapController/generate", MapController.generate, name="map_generate"),
+    path("RAN/Map/MapController/import_glb", MapController.import_glb, name="map_import_glb"),
+    path("RAN/Map/MapController/mesh/<str:filename>", MapController.mesh, name="map_mesh_file"),
+    path("RAN/Map/MapController/list", MapController.list, name="map_list"),
+    path("RAN/Map/MapController/read", MapController.read, name="map_read"),
+    path("RAN/Map/MapController/apply_to_scene", MapController.apply_to_scene, name="map_apply_to_scene"),
+    path("RAN/Map/MapController/setup_indoor", MapController.setup_indoor, name="map_setup_indoor"),
+    path("RAN/Map/MapController/plan_path", MapController.plan_path, name="map_plan_path"),
+    path("RAN/Map/MapController/detach", MapController.detach, name="map_detach"),
+    path("RAN/Map/MapController/delete", MapController.delete, name="map_delete"),
 
     # ---- RAN/Assets ----
     path("RAN/Assets/UsdAssetReader/list", UsdAssetReader.list, name="asset_list"),

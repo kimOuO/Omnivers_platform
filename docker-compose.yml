@@ -52,6 +52,12 @@ services:
       LOG_LEVEL: ${LOG_LEVEL}
       BACKEND_HOST: "0.0.0.0"               # Backend listening address
       BACKEND_PORT: "8000"                  # Backend listening port
+      # MapController 產出 USD 的目錄 — 用「同路徑」絕對路徑,Kit 容器解析得到同一檔
+      MAPS_DIR: "/home/mitlab/XAPP_DT/Omnivers_platform/assets/maps"
+      # Physics(Sionna)在另一個 compose 專案,經 host gateway 連
+      PHYSICS_URL: "http://host.docker.internal:8104"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,6 +65,8 @@ services:
         condition: service_started
     volumes:
       - ./Omniver-RAN:/app                   # live code reload
+      # 同路徑 bind mount:backend 寫的地圖 USD,Kit 以相同絕對路徑載入
+      - /home/mitlab/XAPP_DT/Omnivers_platform/assets/maps:/home/mitlab/XAPP_DT/Omnivers_platform/assets/maps
     restart: unless-stopped
 
   frontend:
