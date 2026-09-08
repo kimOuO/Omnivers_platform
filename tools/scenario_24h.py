@@ -151,6 +151,7 @@ def build_scenario(
     ue_height_m: float = 1.7,
     park_offset_m: float = 25.0,
     gnbs: list[dict[str, Any]] | None = None,
+    mitsuba_xml_path: str | None = None,
     tick_ms: int = 500,
     seed: int = 0,
 ) -> dict[str, Any]:
@@ -217,6 +218,11 @@ def build_scenario(
         "ues": ues,
         "gnbs": gnbs or [],
         "buildings": [],
+        # 掃描類場景的幾何是 Mitsuba mesh 檔，不是 building 方塊。沒有這個欄位的話，
+        # precompute 會用「buildings 方塊」重建幾何 —— buildings 是空的，
+        # 整條走廊會被清成自由空間，算出來的 channel 完全不是室內。
+        "geometry_source": ({"type": "mitsuba_xml_path", "path": mitsuba_xml_path}
+                            if mitsuba_xml_path else None),
         "traffic": traffic,
         "_doc": [
             "24 小時走廊人流劇本（位置 + 流量）",
@@ -256,6 +262,7 @@ if __name__ == "__main__":
         scenario_id="corridor_24h",
         scene_id="scan_20260906",
         usd_path="/home/mitlab/XAPP_DT/Omnivers_platform/assets/maps/scan_20260906.usd",
+        mitsuba_xml_path="/home/mitlab/XAPP_DT/Omnivers_platform/assets/maps/scan_20260906.mitsuba.xml",
         max_ue=18,
         gnbs=[
             {"name": "src", "pci": 0, "cell_id": "src", "position": [3.73, 2.5, -14.15],
@@ -278,3 +285,57 @@ if __name__ == "__main__":
     for h in range(0, 24, 2):
         s = h * 3600 // SLOT_SEC
         print(f"  {h:02d}:00  目標 {tc[s]:2d} 人  實際 {ac[s]:2d} 人")
+
+
+def slice_scenario(sc: dict[str, Any], t0: float, t1: float,
+                   scenario_id: str) -> dict[str, Any]:
+    """從既有劇本切出 [t0, t1) 的時段，時間軸重新基準化到 0。
+
+    precompute 是逐 tick 呼叫 Sionna，24 小時 = 172,800 個 tick。
+    先切一小段驗證整條鏈路，比直接投入十幾小時 GPU 合理。
+    """
+    dur = t1 - t0
+
+    def clip_series(rows: list[list[float]], keep_cols: int) -> list[list[float]]:
+        """裁切帶時戳的序列，並在邊界補上內插點，避免開頭/結尾缺值。"""
+        out = []
+        prev = None
+        for r in rows:
+            t = r[0]
+            if t < t0:
+                prev = r
+                continue
+            if t >= t1:
+                break
+            if not out and prev is not None:
+                out.append([0.0] + list(prev[1:1 + keep_cols]))
+            out.append([round(t - t0, 3)] + list(r[1:1 + keep_cols]))
+        if not out:
+            base = prev if prev is not None else rows[0]
+            out = [[0.0] + list(base[1:1 + keep_cols])]
+        if out[-1][0] < dur:
+            out.append([dur] + list(out[-1][1:]))
+        return out
+
+    ues, traffic = [], []
+    for u in sc["ues"]:
+        pos = clip_series(u["positions"], 3)
+        active = []
+        for a, b in (u.get("active") or []):
+            lo, hi = max(a, t0), min(b, t1)
+            if hi > lo:
+                active.append([round(lo - t0, 3), round(hi - t0, 3)])
+        ues.append({**u, "positions": pos, "active": active})
+    for t in sc.get("traffic", []):
+        traffic.append({**t, "profile": clip_series(t["profile"], 2)})
+
+    return {**sc,
+            "scenario_id": scenario_id,
+            "duration_sec": float(dur),
+            "ues": ues,
+            "traffic": traffic,
+            "_doc": [f"自 {sc['scenario_id']} 切出 {t0/3600:.0f}:00–{t1/3600:.0f}:00 的時段"]
+                    + list(sc.get("_doc", [])),
+            "_metadata": {**sc.get("_metadata", {}),
+                          "sliced_from": sc["scenario_id"],
+                          "slice_window_sec": [t0, t1]}}
