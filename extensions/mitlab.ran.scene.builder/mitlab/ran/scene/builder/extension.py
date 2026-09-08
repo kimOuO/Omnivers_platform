@@ -1185,6 +1185,32 @@ class RANSceneBuilderExtension(omni.ext.IExt):
         cell_info = f", cells={len(cells)}" if cells else ""
         print(f"[RAN] gNB '{name}' at {pos}, freq={freq_ghz}GHz{cell_info}")
 
+    def set_ue_visible(self, name, visible):
+        """切換單一 UE 的可見性。
+
+        劇本裡「離場」的人原本只能停到走廊外的等候點 —— prim 一直存在，
+        拉遠鏡頭就看到一團人站著不動，而且 RAN 模擬中他們仍會 attach，
+        「連線 UE 數」這類 KPI 會恆等於 UE 池大小而非當下實際人數。
+
+        Kit 自己的動畫是累積位移、沒有絕對時鐘，算不出「幾點該有幾個人」，
+        所以可見性跟位置一樣由外部驅動（POST /ue/{name}/visible）。
+        """
+        stage = omni.usd.get_context().get_stage()
+        if stage is None:
+            return False
+        prim = stage.GetPrimAtPath(f"/World/{_to_prim_name(name)}")
+        if not prim.IsValid():
+            print(f"[RAN] set_ue_visible: UE '{name}' not found")
+            return False
+        imageable = UsdGeom.Imageable(prim)
+        if not imageable:
+            return False
+        if visible:
+            imageable.MakeVisible()
+        else:
+            imageable.MakeInvisible()
+        return True
+
     def _build_ue(self, stage, config):
         name = config["name"]
         pos = config["position"]

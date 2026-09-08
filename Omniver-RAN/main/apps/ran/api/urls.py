@@ -90,6 +90,7 @@ urlpatterns = [
     path("RAN/Scenario/ScenarioController/list", ScenarioController.list, name="scenario_list"),
     path("RAN/Scenario/ScenarioController/read", ScenarioController.read, name="scenario_read"),
     path("RAN/Scenario/ScenarioController/apply_to_scene", ScenarioController.apply_to_scene, name="scenario_apply_to_scene"),
+    path("RAN/Scenario/ScenarioController/apply_time", ScenarioController.apply_time, name="scenario_apply_time"),
     path("RAN/Scenario/ScenarioController/precompute", ScenarioController.precompute, name="scenario_precompute"),
     path("RAN/Scenario/ScenarioController/update_status", ScenarioController.update_status, name="scenario_update_status"),
     path("RAN/Scenario/ScenarioController/delete", ScenarioController.delete, name="scenario_delete"),

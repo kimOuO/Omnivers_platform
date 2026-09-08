@@ -73,6 +73,15 @@ class KitBusinessService:
         KitBusinessService._post(f"/ue/{name}/move", {"x": x, "y": y, "z": z})
 
     @staticmethod
+    def set_ue_visible(name: str, visible: bool) -> bool:
+        """切 Kit 裡該 UE 的可見性。回傳是否送出成功（Kit 未就緒時不該讓整批中斷）。"""
+        try:
+            KitBusinessService._post(f"/ue/{name}/visible", {"visible": bool(visible)})
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    @staticmethod
     def set_trajectory(name: str, waypoints: list[list[float]], speed_mps: float, loop: bool = True) -> None:
         KitBusinessService._post(
             f"/ue/{name}/trajectory",
@@ -89,6 +98,8 @@ class KitBusinessService:
         serving_gnb: str | None = None,
         serving_pci: int | None = None,
         serving_cell_id: str | None = None,
+        throughput_dl_mbps: float | None = None,
+        throughput_ul_mbps: float | None = None,
     ) -> None:
         body = {
             "serving_cell": serving_cell,
@@ -102,6 +113,10 @@ class KitBusinessService:
             body["serving_pci"] = serving_pci
         if serving_cell_id is not None:
             body["serving_cell_id"] = serving_cell_id
+        if throughput_dl_mbps is not None:
+            body["throughput_dl_mbps"] = throughput_dl_mbps
+        if throughput_ul_mbps is not None:
+            body["throughput_ul_mbps"] = throughput_ul_mbps
         KitBusinessService._post(f"/ue/{name}/signal", body)
 
     # ---- gNB ----

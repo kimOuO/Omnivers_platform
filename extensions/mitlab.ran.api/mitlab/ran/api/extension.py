@@ -12,7 +12,7 @@ backend) via POST /ue/{name}/signal and stored on the UE prim as custom attrs:
 """
 import json
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import omni.ext
@@ -60,6 +60,19 @@ def _get_ue_signal(prim):
             result["rsrp_map"] = json.loads(str(a.Get()))
         except Exception:  # noqa: BLE001
             result["rsrp_map"] = {}
+    # 額外欄位(供 /ues、WS snapshot、前端顯示;label 亦讀同一批 ran:* attrs)
+    for attr, key, caster in (
+        ("ran:serving_cell_id", "serving_cell_id", str),
+        ("ran:serving_pci", "serving_pci", int),
+        ("ran:throughput_dl_mbps", "throughput_dl_mbps", float),
+        ("ran:throughput_ul_mbps", "throughput_ul_mbps", float),
+    ):
+        a = prim.GetAttribute(attr)
+        if a and a.HasValue():
+            try:
+                result[key] = caster(a.Get())
+            except Exception:  # noqa: BLE001
+                pass
     return result
 
 
@@ -107,9 +120,12 @@ def _scan_stage(stage, builder=None):
         has_asset = "Asset" in child_names  # USD reference building
         has_tower = "Tower" in child_names
         has_antenna = "Antenna" in child_names
+        # 多 cell gNB:Tower/Antenna 巢狀在 cell_N 底下,容器直接子節點是 cell_*。
+        # 單 cell(legacy)才有直接 Tower+Antenna。兩種都要當 gNB。
+        has_cells = any(n.startswith("cell_") for n in child_names)
 
-        # Check for gNB (has Tower and Antenna)
-        if (has_tower and has_antenna) and prim_name in gnb_lookup:
+        # Check for gNB (單 cell: Tower+Antenna;多 cell: cell_ 子節點)
+        if ((has_tower and has_antenna) or has_cells) and prim_name in gnb_lookup:
             original_name = gnb_lookup[prim_name]
             cfg = config_gnbs[original_name]
             # gNB container Xform has no translate (actual position lives on the
@@ -126,6 +142,8 @@ def _scan_stage(stage, builder=None):
                 "power_dbm": float(cfg.get("power_dbm", 0) or 0),
                 "bw_hz": float(cfg.get("bandwidth_mhz", 0) or 0) * 1_000_000.0,
                 "active": True,
+                # 帶 cells(含各 cell 位置/pci)供前端 2D 地圖把多 cell 分開畫
+                "cells": cfg.get("cells") or [],
             })
 
         # Check for Building (has Mesh for cube OR Asset for USD reference) — check even if gNB matched
@@ -158,6 +176,10 @@ def _scan_stage(stage, builder=None):
                 "rsrp_dbm": sig["rsrp_dbm"],
                 "sinr_db": sig["sinr_db"],
                 "rsrp_map": sig["rsrp_map"],
+                "serving_cell_id": sig.get("serving_cell_id"),
+                "serving_pci": sig.get("serving_pci"),
+                "throughput_dl_mbps": sig.get("throughput_dl_mbps"),
+                "throughput_ul_mbps": sig.get("throughput_ul_mbps"),
                 "speed_mps": float(anim["speed"]) if anim else None,
             })
     return gnbs, ues, buildings
@@ -168,6 +190,11 @@ def _scan_stage(stage, builder=None):
 # ----------------------------------------------------------------------------
 
 class RANAPIHandler(BaseHTTPRequestHandler):
+    # ★ 每連線 socket timeout ★
+    # 沒設 timeout 時,readinto 會被「沒斷乾淨的 client」(docker 埠轉發 hairpin
+    # 下、client 端 timeout 中斷時常見)永久卡住 —— py-spy 實證 serve_forever
+    # 執行緒凍在 readinto,單執行緒 server 因此整個 API 死掉。
+    timeout = 10
     """`self.server.ext` points back to the extension instance."""
 
     def log_message(self, format, *args):
@@ -329,6 +356,10 @@ class RANAPIHandler(BaseHTTPRequestHandler):
                 if action == "signal":
                     ext._enqueue("push_signal", name=name, **body)
                     self._send_json({"status": "queued", "ue": name}); return
+                if action == "visible":
+                    ext._enqueue("set_ue_visible", name=name,
+                                 visible=bool(body.get("visible", True)))
+                    self._send_json({"status": "queued", "ue": name}); return
 
             if len(parts) == 3 and parts[0] == "gnb" and parts[2] == "update":
                 body = self._read_body()
@@ -427,7 +458,11 @@ class RANAPIExtension(omni.ext.IExt):
 
     def _start_server(self):
         try:
-            server = HTTPServer(("0.0.0.0", API_PORT), RANAPIHandler)
+            # ThreadingHTTPServer:每個連線一條執行緒 —— 單一掛掉的 client 不再
+            # 挾持整個 API(舊版單執行緒 HTTPServer 會被一個半死連線卡死)。
+            # 搭配 RANAPIHandler.timeout,掛掉的連線最多佔一條執行緒 10 秒。
+            server = ThreadingHTTPServer(("0.0.0.0", API_PORT), RANAPIHandler)
+            server.daemon_threads = True
             server.ext = self
             self._server = server
             self._server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -453,6 +488,7 @@ class RANAPIExtension(omni.ext.IExt):
                 "POST /ue/{name}/move       body={x,y,z}",
                 "POST /ue/{name}/trajectory body={waypoints,speed_mps,loop}",
                 "POST /ue/{name}/signal     body={serving_cell,rsrp_dbm,sinr_db,rsrp_map}",
+            "POST /ue/{name}/visible    body={visible:bool}",
                 "POST /gnb/{name}/update    body={power_dbm,active,frequency_ghz,bandwidth_mhz,position}",
             ],
         }
@@ -501,6 +537,8 @@ class RANAPIExtension(omni.ext.IExt):
                         speed_mps=cmd.get("speed_mps"),
                         loop=cmd.get("loop", True),
                     )
+                elif action == "set_ue_visible":
+                    builder.set_ue_visible(cmd["name"], cmd.get("visible", True))
                 elif action == "push_signal":
                     builder.push_signal(
                         name=cmd["name"],
@@ -511,6 +549,8 @@ class RANAPIExtension(omni.ext.IExt):
                         serving_gnb=cmd.get("serving_gnb"),
                         serving_pci=cmd.get("serving_pci"),
                         serving_cell_id=cmd.get("serving_cell_id"),
+                        throughput_dl_mbps=cmd.get("throughput_dl_mbps"),
+                        throughput_ul_mbps=cmd.get("throughput_ul_mbps"),
                     )
                 elif action == "update_gnb":
                     builder.update_gnb(

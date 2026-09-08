@@ -253,14 +253,30 @@ class ScenarioController:
                 positions = u.get("positions") or []
                 if not name or not positions:
                     continue
-                wps = [[float(p[1]), float(p[2]), float(p[3])] for p in positions]
+                # 劇本 positions 有兩種格式:[t,x,y,z](自帶時戳)與 [x,y,z](沒時戳)。
+                # 原本寫死讀 p[1..3],遇到 3 元素會 IndexError → 整批 UE 的航點掉光,
+                # 套用後從 /editor 跑就全是靜止單點(2026-08-24 anr_missing_meas 踩到:
+                # 五個 UE 只有手繪的那個會動,其餘四個 waypoints=0)。
+                wps = [
+                    [float(q[1]), float(q[2]), float(q[3])] if len(q) >= 4
+                    else [float(q[0]), float(q[1]), float(q[2])]
+                    for q in positions if len(q) >= 3
+                ]
+                if not wps:
+                    continue
                 first = wps[0]
+                # 帶上劇本自己指定的身高與速度。少了這兩個欄位，Kit 會走
+                # _build_ue 的 fallback 把人放大到 34 m（那是城市尺度的預設值），
+                # 室內劇本套用後人就會比走廊還高。
                 UeConfig.objects.create(
                     ue_uuid=UUIDService.generate_uuid("ue", name),
                     name=name,
                     waypoints_json=wps,
                     pos_x=first[0], pos_y=first[1], pos_z=first[2],
-                    loop=False,
+                    speed_mps=float(u.get("speed_mps") or 1.0),
+                    target_height_m=(float(u["target_height_m"])
+                                     if u.get("target_height_m") is not None else None),
+                    loop=bool(u.get("loop", False)),
                     ue_created_at=ts, ue_updated_at=ts,
                 )
                 n_ue += 1
@@ -309,6 +325,78 @@ class ScenarioController:
         except Exception as e:
             log.exception("apply_to_scene failed")
             return error_response(f"apply_to_scene failed: {e}", {}, 500)
+
+    @staticmethod
+    @actor
+    def apply_time(request):
+        """把劇本在某個時刻的「在場名單」套到 Kit —— 不在場的 UE 設為隱形。
+
+        為什麼需要這支：劇本的 UE 清單是固定的，離場只能靠「停到走廊外」表達，
+        prim 一直存在。Kit 自己的動畫是累積位移、沒有絕對時鐘，算不出
+        「幾點該有幾個人」，所以由後端讀劇本的 active 時間軸再推給 Kit。
+
+        Body: {scenario_id, t_sec}
+        t_sec 可以超過 duration_sec，會自動取模（方便循環播放）。
+        """
+        data, error = parse_body(request)
+        if error:
+            return error
+        scenario_id = data.get("scenario_id")
+        if not scenario_id:
+            return error_response("Missing scenario_id", {}, 400)
+        try:
+            t = float(data.get("t_sec", 0))
+        except (TypeError, ValueError):
+            return error_response("t_sec 需為數字", {}, 400)
+        try:
+            sc = Scenario.objects.get(scenario_id=scenario_id)
+        except Scenario.DoesNotExist:
+            return error_response(f"Scenario {scenario_id} not found", {}, 404)
+
+        raw = sc.raw_json or {}
+        dur = float(raw.get("duration_sec") or 0) or 86400.0
+        t = t % dur
+
+        present, absent, no_window = [], [], []
+        for u in raw.get("ues", []) or []:
+            name = u.get("name")
+            if not name:
+                continue
+            windows = u.get("active")
+            if not windows:
+                # 沒有 active 時間軸的劇本一律當成全程在場，維持舊行為
+                no_window.append(name)
+                present.append(name)
+                continue
+            if any(float(a) <= t < float(b) for a, b in windows):
+                present.append(name)
+            else:
+                absent.append(name)
+
+        ok, failed = 0, []
+        for name in present:
+            if KitBusinessService.set_ue_visible(name, True):
+                ok += 1
+            else:
+                failed.append(name)
+        for name in absent:
+            if KitBusinessService.set_ue_visible(name, False):
+                ok += 1
+            else:
+                failed.append(name)
+
+        hh, mm = int(t // 3600), int((t % 3600) // 60)
+        log.info("apply_time %s @ %02d:%02d — 在場 %d / 離場 %d",
+                 scenario_id, hh, mm, len(present), len(absent))
+        return success_response(
+            {"scenario_id": scenario_id, "t_sec": round(t, 1),
+             "clock": f"{hh:02d}:{mm:02d}",
+             "present": present, "absent": absent,
+             "present_count": len(present), "absent_count": len(absent),
+             "ues_without_active_window": no_window,
+             "kit_calls_ok": ok, "kit_calls_failed": failed},
+            message=f"{hh:02d}:{mm:02d} — 在場 {len(present)} 人、離場 {len(absent)} 人已隱藏",
+        )
 
     @staticmethod
     @actor
