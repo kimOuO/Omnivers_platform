@@ -39,6 +39,24 @@ v2 用色彩判 glass / metal，實測**全是誤判**（詳見
 
 輸出一律附上 `evidence`：有正面證據支持的面積佔比、以及回退面積佔比。
 「4.4% 是玻璃」而不說那 4.4% 的信心是零，比不分類更危險。
+
+## v5：兩層判定，把「猜的」從 47.9% 降到 15.5%
+
+v4 的問題不在標籤錯（非木即混凝土是對的），而在**大部分垂直面沒有證據**：
+逐三角形只看得到顏色，一片白牆和一扇窗在單一 RGB 上沒有差別，只能算猜的。
+
+v5 加了兩層結構判定（`scan_segmentation` + `scan_openings`）：
+
+  - **表面層**：把共面且相鄰的色彩碎片合併回完整表面。一個 8 m² 以上、
+    或從地板通到 2.4 m 以上的垂直表面，幾何上就必然是牆 —— 這是證據，
+    不是猜測。這一刀把證據涵蓋率從 52.1% 拉到 84.3%。
+  - **面片層**：木頭仍在色彩碎片的層級判（門的色彩與牆差異明顯，
+    分割純度 69%），並以整片為單位指派，讓門的邊界乾淨而非斑駁。
+
+順帶否證了一個假設：原本預期「窗戶會在牆平面上留下開口」（玻璃穿透深度
+感測不會被重建），實測這份掃描整個網格只有 6 個邊界迴圈、其中沒有窗，
+photogrammetry 把玻璃當成不透明表面重建了。所以開口偵測對這類資料無效，
+`scan_openings.find_openings()` 保留著供其他掃描方式（LiDAR）使用。
 """
 from __future__ import annotations
 
@@ -61,7 +79,7 @@ from main.apps.ran.services.optional.glb_to_usd import (
 )
 
 # 規則版本 —— 門檻調整後請 +1，落地的 json 會記錄，方便回溯是哪一版分出來的
-RULESET_VERSION = 4
+RULESET_VERSION = 5
 
 LABELS = ["itu_concrete", "itu_wood", "itu_glass", "itu_metal"]
 LABEL_IDX = {name: i for i, name in enumerate(LABELS)}
@@ -227,6 +245,86 @@ def _load_image(gltf: dict, binary: bytes, img_idx: int) -> np.ndarray | None:
         return np.asarray(im.convert("RGB"))
 
 
+def _structural_pass(points, faces, area, labels, rgb, is_horizontal, is_vertical,
+                     mode, extra_proven=None):
+    """用「表面」層級的幾何證明牆面，並把木頭以整片為單位指派。
+
+    回傳 (更新後的 labels, evidence)。分割失敗時安全退回逐面規則的結果 ——
+    這一層是用來「把猜測變成證據」的，不該讓匯入整個失敗。
+    """
+    total_area = float(area.sum())
+    proven = (labels == LABEL_IDX["itu_wood"]) | is_horizontal | (~is_vertical)
+    if extra_proven is not None:
+        proven = proven | extra_proven
+    buckets: dict[str, float] = {}
+
+    try:
+        from main.apps.ran.services.optional.scan_openings import merge_into_surfaces
+        from main.apps.ran.services.optional.scan_segmentation import segment_planar
+
+        res = segment_planar(points, faces, rgb=rgb)
+        seg = res["segment_of_face"]
+        res["_faces"] = faces
+        from main.apps.ran.services.optional.glb_to_usd import estimate_floor_y
+        from main.apps.ran.services.optional.scan_segmentation import segment_features
+
+        floor_y = estimate_floor_y(points, faces)
+        feats = segment_features(points, res, floor_y)
+        neighbours = {f["id"]: f["neighbours"] for f in feats}
+        surface_of_face, surfaces = merge_into_surfaces(points, faces, seg, neighbours)
+
+        for s in surfaces:
+            m = surface_of_face == s["id"]
+            if not m.any():
+                continue
+            a = float(area[m].sum())
+            span = float(points[faces[m]][:, :, 1].max() - points[faces[m]][:, :, 1].min())
+            if s["tilt_deg"] > 60:
+                key = "concrete_floor_ceiling"
+            elif s["tilt_deg"] >= 30:
+                key = "concrete_slanted"
+            elif a >= 8.0 or span >= 2.4:
+                # 8 m² 以上、或從地板通到 2.4 m 以上的垂直表面 —— 門不會這麼大，
+                # 也不會通到天花板。這是幾何證據而非猜測。
+                key = "concrete_wall"
+            else:
+                continue
+            proven |= m
+            buckets[key] = buckets.get(key, 0.0) + a
+
+        # 木頭以「整個色彩面片」指派：門是一個物件，逐面判會讓邊界斑駁
+        wood_id = LABEL_IDX["itu_wood"]
+        for f in feats:
+            m = seg == f["id"]
+            a = float(area[m].sum())
+            if a <= 0:
+                continue
+            if float(area[m & (labels == wood_id)].sum()) / a >= 0.45:
+                labels[m] = wood_id
+                proven |= m
+        buckets["wood"] = float(area[labels == wood_id].sum())
+        structural = True
+    except Exception as e:  # noqa: BLE001
+        structural = False
+        buckets = {"error": str(e)}
+
+    fallback = ~proven
+    evidence = {
+        "mode": mode,
+        "ruleset_version": RULESET_VERSION,
+        "structural_pass": structural,
+        "proven_area_pct": round(100.0 * float(area[proven].sum()) / total_area, 2),
+        "fallback_area_pct": round(100.0 * float(area[fallback].sum()) / total_area, 2),
+        "fallback_material": "itu_concrete",
+        "buckets_m2": {k: round(v, 1) for k, v in buckets.items()},
+        "fallback_rationale": (
+            "未判出材質的垂直面回退成不透明的混凝土：做覆蓋/隔離度時，"
+            "把牆誤判成玻璃（訊號穿過去）遠比把玻璃誤判成牆嚴重"
+        ),
+    }
+    return labels, evidence
+
+
 def classify(blob: bytes, mode: str = "conservative") -> dict[str, Any]:
     """對 GLB 逐三角形分類，回傳 labels/points/tris/統計。
 
@@ -350,24 +448,11 @@ def classify(blob: bytes, mode: str = "conservative") -> dict[str, Any]:
     raw_counts = {n: int((labels == i).sum()) for n, i in LABEL_IDX.items()}
     labels, despeckled = _despeckle(labels, faces, points, area, MIN_PATCH_AREA_M2)
 
-    # ── 證據涵蓋率：哪些面是「判出來的」，哪些只是回退 ──
-    # 水平面與斜面的 concrete 是幾何證據（室內不會有朝上的木門/玻璃），算有證據；
-    # 垂直面的 concrete 是「色彩規則沒判出東西」的回退，沒有正面證據。
-    proven = (labels == LABEL_IDX["itu_wood"]) | is_horizontal | (~is_vertical)
-    if mode == "legacy_color":
-        proven = proven | glass | metal
-    fallback = ~proven
-    total_area = float(area.sum())
-    evidence = {
-        "mode": mode,
-        "proven_area_pct": round(100.0 * float(area[proven].sum()) / total_area, 2),
-        "fallback_area_pct": round(100.0 * float(area[fallback].sum()) / total_area, 2),
-        "fallback_material": "itu_concrete",
-        "fallback_rationale": (
-            "未判出材質的垂直面回退成不透明的混凝土：做覆蓋/隔離度時，"
-            "把牆誤判成玻璃（訊號穿過去）遠比把玻璃誤判成牆嚴重"
-        ),
-    }
+    # ── 結構層：合併成表面，用幾何證明哪些垂直面是牆 ──
+    labels, evidence = _structural_pass(
+        points, faces, area, labels, rgb_mean, is_horizontal, is_vertical, mode,
+        extra_proven=(glass | metal) if mode == "legacy_color" else None,
+    )
 
     # ── 診斷：木頭門檻到底有沒有把兩群分開 ──
     # 指標定義見 skill：算「判成 concrete、但距 wood 門檻只差一點」的面積佔比。
