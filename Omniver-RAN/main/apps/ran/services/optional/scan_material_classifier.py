@@ -79,7 +79,7 @@ from main.apps.ran.services.optional.glb_to_usd import (
 )
 
 # 規則版本 —— 門檻調整後請 +1，落地的 json 會記錄，方便回溯是哪一版分出來的
-RULESET_VERSION = 5
+RULESET_VERSION = 6
 
 LABELS = ["itu_concrete", "itu_wood", "itu_glass", "itu_metal"]
 LABEL_IDX = {name: i for i, name in enumerate(LABELS)}
@@ -112,6 +112,11 @@ METAL_STD_MIN = 0.04        # 金屬表面有鏡面漸層 → 取樣點之間變
 # 連通分量清理：小於此面積的非混凝土色塊視為誤判，退回 concrete。
 # 0.3 m² 約是半扇門的 1/6，真實的門窗不會小於這個尺度。
 MIN_PATCH_AREA_M2 = 0.3
+
+# 木頭飽和度門檻改成「取固定下限與場景百分位的較大者」。
+# 固定門檻對相機設定極度敏感：實測白平衡偏暖 12%，木頭面積就從
+# 72.5 m² 暴增到 152.8 m²（+111%），因為整個場景被推進木頭色相帶。
+WOOD_SAT_PERCENTILE = 88.0
 
 
 def _sample_texture(img: np.ndarray, uv: np.ndarray) -> np.ndarray:
@@ -422,6 +427,19 @@ def classify(blob: bytes, mode: str = "conservative") -> dict[str, Any]:
         del img
 
     valid_color = ~np.isnan(rgb_mean[:, 0])
+    # ── 灰世界正規化：抵消相機白平衡造成的全域色偏 ──
+    # 這是色彩門檻能跨場景使用的前提。室內走廊以灰白為主，
+    # 「場景平均應為中性灰」這個假設幾乎完全成立。
+    gains = np.array([1.0, 1.0, 1.0], dtype=np.float32)
+    if valid_color.any():
+        w = area[valid_color]
+        mean_rgb = (rgb_mean[valid_color] * w[:, None]).sum(axis=0) / w.sum()
+        grey = float(mean_rgb.mean())
+        if grey > 1e-3 and (mean_rgb > 1e-3).all():
+            gains = (grey / mean_rgb).astype(np.float32)
+            gains = np.clip(gains, 0.6, 1.7)   # 夾住，避免單色場景把增益推到極端
+            rgb_mean[valid_color] = np.clip(rgb_mean[valid_color] * gains, 0.0, 1.0)
+
     hsv = np.zeros((n_faces, 3), dtype=np.float32)
     hsv[valid_color] = _rgb_to_hsv(rgb_mean[valid_color])
     hue, sat, val = hsv[:, 0], hsv[:, 1], hsv[:, 2]
@@ -430,9 +448,18 @@ def classify(blob: bytes, mode: str = "conservative") -> dict[str, Any]:
     labels = np.full(n_faces, LABEL_IDX["itu_concrete"], dtype=np.uint8)
     candidate = is_vertical & valid_color   # 只有垂直面才進色彩規則
 
+    # 飽和度門檻自我校準：木頭在任何場景都是「飽和度明顯高於場景多數表面」
+    # 的那一群，用百分位比用絕對值穩。仍保留固定下限，避免全是木頭的場景
+    # 把門檻拉到荒謬的高度。
+    sat_thresh = WOOD_SAT_MIN
+    if is_vertical.any() and valid_color.any():
+        vs = sat[is_vertical & valid_color]
+        if len(vs) > 100:
+            sat_thresh = max(WOOD_SAT_MIN, float(np.percentile(vs, WOOD_SAT_PERCENTILE)))
+
     # 唯一有正面證據的類別：不透明 + 漫反射 + 色相集中的木頭
     wood = candidate & (hue >= WOOD_HUE[0]) & (hue <= WOOD_HUE[1]) \
-        & (sat >= WOOD_SAT_MIN) & (val >= WOOD_VAL[0]) & (val <= WOOD_VAL[1])
+        & (sat >= sat_thresh) & (val >= WOOD_VAL[0]) & (val <= WOOD_VAL[1])
     labels[wood] = LABEL_IDX["itu_wood"]
 
     glass = np.zeros(n_faces, dtype=bool)
@@ -453,13 +480,15 @@ def classify(blob: bytes, mode: str = "conservative") -> dict[str, Any]:
         points, faces, area, labels, rgb_mean, is_horizontal, is_vertical, mode,
         extra_proven=(glass | metal) if mode == "legacy_color" else None,
     )
+    evidence["white_balance_gains"] = [round(float(g), 3) for g in gains]
+    evidence["wood_sat_threshold"] = round(float(sat_thresh), 3)
 
     # ── 診斷：木頭門檻到底有沒有把兩群分開 ──
     # 指標定義見 skill：算「判成 concrete、但距 wood 門檻只差一點」的面積佔比。
     # > 5% 代表兩群沒分開，門檻只是把邊界樣本搬來搬去，結果不可信。
     vert_concrete = is_vertical & (labels == LABEL_IDX["itu_concrete"])
     near_wood = vert_concrete & (hue >= WOOD_HUE[0]) & (hue <= WOOD_HUE[1]) \
-        & (sat >= WOOD_SAT_MIN - 0.08) & (sat < WOOD_SAT_MIN)
+        & (sat >= sat_thresh - 0.08) & (sat < sat_thresh)
 
     # 邊界面要再分兩種，否則指標會誤報（2026-09-08 實測 5.46% 觸發警報，
     # 逐一看圖後發現多半是門邊的混合像素，不是漏判的木頭）：
