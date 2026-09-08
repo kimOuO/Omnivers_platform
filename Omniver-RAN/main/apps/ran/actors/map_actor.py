@@ -485,10 +485,17 @@ class MapController:
             )
 
         # 存進 MapScene 而不是只塞進這一次的 config —— generator 會在每次
-        # build 重新產生 config，不落地就會被下一次 build 蓋回城市尺度
+        # build 重新產生 config，不落地就會被下一次 build 蓋回城市尺度。
+        #
+        # 也要設成 active：generator 只對 active 地圖注入 environment 與
+        # gnb_visual_scale。少了這一步，「把這張地圖設成室內場景」就只改了
+        # 資料庫欄位而沒有生效 —— 實測 gNB 會用預設 scale 1.0 重建成
+        # 塔身半徑 3 m、輻射環 30 m 的城市尺度巨塔（2026-09-08 踩到）。
+        MapScene.objects.exclude(pk=m.pk).update(active=False)
         m.indoor_mode = True
+        m.active = True
         m.gnb_visual_scale = gnb_visual_scale
-        m.save(update_fields=["indoor_mode", "gnb_visual_scale", "updated_at"])
+        m.save(update_fields=["indoor_mode", "active", "gnb_visual_scale", "updated_at"])
 
         config = SceneConfigGeneratorService.generate()
         KitBusinessService.push_scene_config(config)
@@ -718,5 +725,15 @@ class MapController:
                 shutil.rmtree(tex_dir)
             except OSError as e:
                 log.warning("Failed to delete textures %s: %s", tex_dir, e)
+        was_active = m.active
         m.delete()
-        return success_response({"name": name}, message="Map deleted")
+        if was_active:
+            # 刪掉的是當前套用的地圖 —— 場景此刻沒有任何 environment，
+            # 下一次 build 會少掉地圖幾何與室內設定。講清楚比默默發生好。
+            log.warning("Deleted the active map %s — 場景目前沒有套用任何地圖", name)
+            return success_response(
+                {"name": name, "was_active": True},
+                message=f"已刪除 {name}。它原本是當前套用的地圖，"
+                        "場景現在沒有地圖，請重新套用一張。",
+            )
+        return success_response({"name": name, "was_active": False}, message="Map deleted")
